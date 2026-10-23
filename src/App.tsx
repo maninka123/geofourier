@@ -45,6 +45,7 @@ import FourierCanvas, {
   type Clock,
 } from "./Canvas";
 import Controls, {
+  AppearanceControls,
   defaults,
   SearchSummary,
   Slider,
@@ -1045,6 +1046,7 @@ export default function App() {
               </section>
               {!clean && controls && (
                 <Controls
+                  onOpenAppearance={() => setModal("appearance")}
                   terms={terms}
                   onTerms={(n) => {
                     setTerms(n);
@@ -1320,21 +1322,45 @@ export default function App() {
         {modal && (
           <Modal
             title={
-              modal === "settings"
-                ? "Make it your own."
-                : modal === "export"
-                  ? "Take your mathematics with you."
-                  : modal === "method"
-                    ? "Measured, not made up."
-                    : modal === "equation"
-                      ? "The equation behind your border."
-                      : "A world made of circles."
+              modal === "appearance"
+                ? "Appearance"
+                : modal === "settings"
+                  ? "Make it your own."
+                  : modal === "export"
+                    ? "Take your mathematics with you."
+                    : modal === "method"
+                      ? "Measured, not made up."
+                      : modal === "equation"
+                        ? "The equation behind your border."
+                        : "A world made of circles."
             }
             onClose={() => setModal("")}
             wide={
               modal === "learn" || modal === "method" || modal === "equation"
             }
           >
+            {modal === "appearance" && (
+              <div className="appearance-popup">
+                <div className="appearance-popup-heading">
+                  <p>Fine-tune your canvas.</p>
+                  <button
+                    className="icon-button appearance-reset"
+                    title="Reset appearance to defaults"
+                    aria-label="Reset appearance to defaults"
+                    onClick={() => {
+                      setAppearance({ ...defaultAppearance });
+                      notify("Default appearance restored.");
+                    }}
+                  >
+                    <RotateCcw size={17} />
+                  </button>
+                </div>
+                <AppearanceControls
+                  appearance={appearance}
+                  onChange={setAppearance}
+                />
+              </div>
+            )}
             {modal === "settings" && (
               <>
                 <p className="modal-intro">
