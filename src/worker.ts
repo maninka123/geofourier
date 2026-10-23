@@ -27,17 +27,37 @@ self.onmessage = async ({ data }) => {
       if (models.size > 32) models.delete(models.keys().next().value!);
     }
     if (action === "search") {
+      let lastPreview = -Infinity;
       const result = await search(
         model!,
         data.target,
         data.limit,
         data.step,
         data.maxMs,
-        (point, best, evaluations, elapsed) =>
+        (point, best, evaluations, elapsed, analysis) => {
+          const includePreview =
+            data.includePreview &&
+            (elapsed - lastPreview >= 75 || point.terms === data.limit);
+          if (includePreview) lastPreview = elapsed;
           self.postMessage({
             id,
-            progress: { point, best, evaluations, elapsed },
-          }),
+            progress: {
+              point,
+              best,
+              evaluations,
+              elapsed,
+              ...(includePreview
+                ? {
+                    preview: {
+                      paths: analysis.paths,
+                      metrics: analysis.metrics,
+                      terms: analysis.terms,
+                    },
+                  }
+                : {}),
+            },
+          });
+        },
         () => cancelled.has(id),
       );
       cancelled.delete(id);

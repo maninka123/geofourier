@@ -374,6 +374,7 @@ export async function search(
     best: CurvePoint,
     evaluations: number,
     elapsed: number,
+    analysis: Analysis,
   ) => void,
   isCancelled = () => false,
 ): Promise<SearchResult> {
@@ -402,7 +403,7 @@ export async function search(
       };
     curve.push(point);
     if (point.similarity > best.similarity) best = point;
-    onPoint(point, best, curve.length, performance.now() - start);
+    onPoint(point, best, curve.length, performance.now() - start, a);
     if (point.similarity >= target) {
       reason = "target";
       break;

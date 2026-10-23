@@ -52,7 +52,7 @@ import Controls, {
   Toggle,
   type Settings,
 } from "./Controls";
-import Chart from "./Chart";
+import StudioAccuracy from "./StudioAccuracy";
 import { DifficultyLab, CompareView } from "./Views";
 import { runSearch, useAnalysis, type Config, type Progress } from "./client";
 import type { Analysis, Country, CurvePoint, SearchResult } from "./engine";
@@ -1217,55 +1217,14 @@ export default function App() {
                       </div>
                     </div>
                   </section>
-                  <section className="surface insight-card">
-                    <div className="insight-icon">
-                      <Waves size={24} />
-                    </div>
-                    <span className="section-eyebrow">
-                      A MOMENT OF DISCOVERY
-                    </span>
-                    <h3>Complexity isn’t about size.</h3>
-                    <p>
-                      A tiny, intricate coastline can need more circles than an
-                      entire continent.
-                    </p>
-                    <button
-                      className="text-button"
-                      onClick={() => setTab("Difficulty Lab")}
-                    >
-                      Step into the Difficulty Lab <ArrowRight size={14} />
-                    </button>
-                  </section>
+                  <StudioAccuracy
+                    config={config}
+                    settings={settings}
+                    country={selected}
+                    current={construction.terms}
+                    searchCurve={curve}
+                  />
                 </div>
-                {(curve.length > 0 || searching) && (
-                  <section className="surface search-chart">
-                    <div className="card-heading">
-                      <div>
-                        <span className="section-eyebrow">
-                          YOUR OPTIMIZATION
-                        </span>
-                        <h2>Finding the right number of circles.</h2>
-                      </div>
-                      <button
-                        className="text-button"
-                        onClick={() => exportFile("csv")}
-                      >
-                        <DownloadIcon /> Export CSV
-                      </button>
-                    </div>
-                    <Chart
-                      points={curve}
-                      target={target}
-                      max={Math.min(settings.cap, settings.samples)}
-                      current={terms}
-                    />
-                    <p className="note">
-                      Ascending measured search · first qualifying count on a{" "}
-                      {settings.step}-term grid · no monotonicity assumption ·{" "}
-                      {settings.maxTime}s time budget.
-                    </p>
-                  </section>
-                )}
               </>
             )}
           </>

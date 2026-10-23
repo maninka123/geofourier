@@ -6,14 +6,19 @@ export default function Chart({
   current,
   max = 500,
   label = "Measured reconstruction accuracy",
+  compact = false,
+  series = [],
 }: {
   points: CurvePoint[];
   target?: number;
   current?: number;
   max?: number;
   label?: string;
+  compact?: boolean;
+  series?: { id: string; label: string; color: string; points: CurvePoint[] }[];
 }) {
   const [hover, setHover] = useState<CurvePoint>();
+  const [hoverCountry, setHoverCountry] = useState("");
   const container = useRef<HTMLDivElement>(null);
   const [w, setWidth] = useState(700);
   useEffect(() => {
@@ -25,7 +30,7 @@ export default function Chart({
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
-  const h = 245,
+  const h = compact ? 180 : 245,
     left = 50,
     right = 24,
     top = 24,
@@ -33,9 +38,9 @@ export default function Chart({
     x = (n: number) => left + (n / max) * (w - left - right),
     y = (n: number) => top + ((100 - n) / 100) * (h - top - bottom);
   return (
-    <div className="chart" ref={container}>
+    <div className={`chart ${compact ? "compact-chart" : ""}`} ref={container}>
       <svg viewBox={`0 0 ${w} ${h}`} role="img" aria-label={label}>
-        {[0, 25, 50, 75, 100].map((n) => (
+        {(compact ? [0, 50, 100] : [0, 25, 50, 75, 100]).map((n) => (
           <g key={n}>
             <line
               x1={left}
@@ -115,15 +120,55 @@ export default function Chart({
             ))}
           </>
         )}
+        {series.map((s) => (
+          <g key={s.id}>
+            <polyline
+              points={s.points
+                .map((p) => `${x(p.terms)},${y(p.similarity)}`)
+                .join(" ")}
+              fill="none"
+              stroke={s.color}
+              strokeWidth="2.4"
+              strokeLinejoin="round"
+            />
+            {s.points.map((p) => (
+              <circle
+                key={p.terms}
+                cx={x(p.terms)}
+                cy={y(p.similarity)}
+                r={hover === p ? 5 : 2.5}
+                fill={s.color}
+                tabIndex={0}
+                role="img"
+                aria-label={`${s.label}: ${p.terms} terms, ${p.similarity.toFixed(2)}%`}
+                onMouseEnter={() => {
+                  setHover(p);
+                  setHoverCountry(s.label);
+                }}
+                onFocus={() => {
+                  setHover(p);
+                  setHoverCountry(s.label);
+                }}
+                onMouseLeave={() => setHover(undefined)}
+                onBlur={() => setHover(undefined)}
+              />
+            ))}
+          </g>
+        ))}
       </svg>
-      {points.length === 0 && (
+      {points.length === 0 && !series.some((s) => s.points.length) && (
         <div className="chart-empty">
-          Run an analysis to reveal the measured accuracy curve.
+          {series.length
+            ? "Calculate curves to compare every selected country."
+            : compact
+              ? "Calculate to see how similarity changes with N."
+              : "Run an analysis to reveal the measured accuracy curve."}
         </div>
       )}
       {hover && (
         <div className="chart-tooltip">
-          N = {hover.terms} <b>{hover.similarity.toFixed(2)}%</b>
+          {hoverCountry && `${hoverCountry} · `}N = {hover.terms}{" "}
+          <b>{hover.similarity.toFixed(2)}%</b>
         </div>
       )}
       <span className="axis-label">FOURIER TERMS</span>

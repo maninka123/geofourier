@@ -17,6 +17,7 @@ const callbacks = new Map<
   }
 >();
 export type Progress = {
+  preview?: Pick<Analysis, "paths" | "metrics" | "terms">;
   point: CurvePoint;
   best: CurvePoint;
   evaluations: number;
@@ -109,11 +110,12 @@ export function runSearch(
   step: number,
   maxMs: number,
   progress: (p: Progress) => void,
+  includePreview = false,
 ) {
   return request<SearchResult>(
     "search",
     config,
-    { target, limit, step, maxMs },
+    { target, limit, step, maxMs, includePreview },
     progress,
   );
 }

@@ -25,7 +25,9 @@ import {
 } from "./engine";
 import CountryPicker, { Flag } from "./CountryPicker";
 import { Slider, type Settings } from "./Controls";
-import Chart from "./Chart";
+import TermRanking from "./TermRanking";
+import CompareAccuracy from "./CompareAccuracy";
+import { compareColors } from "./compareColors";
 import { csv, download } from "./exports";
 type Row = {
   id: string;
@@ -72,7 +74,35 @@ export function DifficultyLab({
   const [batch, setBatch] = useState<string[]>([]),
     [batchDone, setBatchDone] = useState<string[]>([]),
     [activeCountry, setActiveCountry] = useState(""),
+    [live, setLive] = useState<{
+      country: string;
+      curve: CurvePoint[];
+      analysis?: Analysis;
+    }>({ country: "", curve: [] }),
     [datasetCountries, setDatasetCountries] = useState(countries);
+  const liveClock = useRef<Clock>({
+    elapsed: 0,
+    playing: true,
+    duration: 4,
+    speed: 1,
+    loops: Infinity,
+  });
+  useEffect(() => {
+    if (!running || matchMedia("(prefers-reduced-motion: reduce)").matches)
+      return;
+    let previous = performance.now(),
+      frame = 0;
+    const animate = (now: number) => {
+      liveClock.current.elapsed += Math.max(
+        0,
+        Math.min((now - previous) / 1000, 0.15),
+      );
+      previous = now;
+      frame = requestAnimationFrame(animate);
+    };
+    frame = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(frame);
+  }, [running]);
   useEffect(() => {
     fetch(`${import.meta.env.BASE_URL}data/countries-${config.resolution}.json`)
       .then((r) => r.json())
@@ -112,20 +142,37 @@ export function DifficultyLab({
           name = countries.find((c) => c.id === id)?.name || id;
         setStatus(`${name} · ${index + 1} of ${ids.length}`);
         setActiveCountry(id);
+        setLive({ country: id, curve: [] });
+        liveClock.current.elapsed = 0;
         const configFor = { ...config, country: id };
         const analyzed = await request<Analysis>("analyze", configFor, {
           terms: settings.cap,
         }).promise;
+        if (cancel.current || v !== runVersion.current) break;
+        const liveCurve: CurvePoint[] = [];
         job.current = runSearch(
           configFor,
           101,
           Math.min(settings.cap, settings.samples),
           settings.step,
           settings.maxTime * 1000,
-          (p) =>
+          (p) => {
+            if (cancel.current || v !== runVersion.current) return;
+            liveCurve.push(p.point);
+            setLive((previous) => ({
+              country: id,
+              curve: [...liveCurve],
+              analysis: p.preview
+                ? { model: analyzed.model, ...p.preview }
+                : previous.country === id
+                  ? previous.analysis
+                  : undefined,
+            }));
             setStatus(
               `${name} · N ${p.point.terms} · ${p.point.similarity.toFixed(2)}% · ${index + 1}/${ids.length}`,
-            ),
+            );
+          },
+          true,
         );
         const result = await job.current.promise;
         if (cancel.current || v !== runVersion.current) break;
@@ -165,8 +212,8 @@ export function DifficultyLab({
       if (v === runVersion.current) {
         setRunning(false);
         setActiveCountry("");
+        setStatus("");
       }
-      setStatus("");
     }
   };
   const sorted = useMemo(
@@ -187,6 +234,17 @@ export function DifficultyLab({
         }),
     [rows, datasetCountries, filter, sort],
   );
+  const liveCountry = datasetCountries.find((c) => c.id === activeCountry),
+    showingLive = running && Boolean(activeCountry),
+    liveAnalysis = live.country === activeCountry ? live.analysis : undefined,
+    displayAnalysis = showingLive ? liveAnalysis : preview.analysis,
+    displayTerms = showingLive ? liveAnalysis?.terms : terms,
+    displayBusy = showingLive ? !liveAnalysis : preview.busy,
+    limit = Math.min(settings.cap, settings.samples);
+  const remaining = useMemo(
+    () => datasetCountries.filter((c) => !rows.some((r) => r.id === c.id)),
+    [datasetCountries, rows],
+  );
   return (
     <div className="lab-view">
       <div className="view-heading">
@@ -198,23 +256,35 @@ export function DifficultyLab({
         <div className="view-actions">
           <button
             className="button primary"
-            disabled={running || !datasetCountries.length}
+            disabled={!running && !remaining.length}
             onClick={() => {
-              const remaining = datasetCountries.filter(
-                (c) => !rows.some((r) => r.id === c.id),
-              );
-              void compute(
-                (remaining.length ? remaining : datasetCountries).map(
-                  (c) => c.id,
-                ),
-                remaining.length > 0,
-              );
+              if (running) {
+                cancel.current = true;
+                job.current?.cancel();
+              } else
+                void compute(
+                  remaining.map((c) => c.id),
+                  true,
+                );
             }}
           >
-            <Globe2 size={16} />
-            {rows.length >= datasetCountries.length
-              ? "Recalculate all"
-              : `Calculate all ${datasetCountries.length}`}
+            {running ? (
+              <>
+                <SquareIcon />
+                Stop calculation
+              </>
+            ) : remaining.length ? (
+              <>
+                <Globe2 size={16} />
+                Calculate remaining
+                <span className="button-count">{remaining.length}</span>
+              </>
+            ) : (
+              <>
+                <Check size={16} />
+                All countries calculated
+              </>
+            )}
           </button>
           <button
             className="button secondary"
@@ -228,44 +298,11 @@ export function DifficultyLab({
           >
             <Download size={16} /> Export analysis
           </button>
-          <button
-            className="button primary"
-            onClick={() =>
-              running
-                ? ((cancel.current = true), job.current?.cancel())
-                : compute(
-                    [
-                      "BGD",
-                      "JPN",
-                      "IDN",
-                      "IND",
-                      "AUS",
-                      "CHL",
-                      "NOR",
-                      "BRA",
-                      "FRA",
-                      "CAN",
-                      "LKA",
-                      "ZAF",
-                    ].filter((id) => datasetCountries.some((c) => c.id === id)),
-                  )
-            }
-          >
-            {running ? (
-              <>
-                <SquareIcon /> Stop analysis
-              </>
-            ) : (
-              <>
-                <Beaker size={16} /> Analyze 12 countries
-              </>
-            )}
-          </button>
         </div>
       </div>
       {batch.length > 0 && (
         <section
-          className="surface country-progress"
+          className={`surface country-progress ${running ? "is-running" : ""}`}
           aria-label="Country analysis progress"
         >
           <div className="country-progress-heading">
@@ -302,97 +339,122 @@ export function DifficultyLab({
             />
           </div>
           <div className="flag-progress-strip">
-            {batch.map((id) => (
-              <span
-                key={id}
-                className={`${batchDone.includes(id) ? "done" : ""} ${activeCountry === id ? "current" : ""}`}
-                title={`${countries.find((c) => c.id === id)?.name}: ${batchDone.includes(id) ? "analyzed" : activeCountry === id ? "calculating" : "waiting"}`}
-              >
-                <Flag country={countries.find((c) => c.id === id)} />
-              </span>
-            ))}
+            {batch
+              .filter((id) =>
+                /^[A-Z]{2}$/.test(
+                  datasetCountries.find((c) => c.id === id)?.code || "",
+                ),
+              )
+              .map((id) => (
+                <span
+                  key={id}
+                  className={`${batchDone.includes(id) ? "done" : ""} ${activeCountry === id ? "current" : ""}`}
+                  title={`${countries.find((c) => c.id === id)?.name}: ${batchDone.includes(id) ? "analyzed" : activeCountry === id ? "calculating" : "waiting"}`}
+                >
+                  <Flag country={countries.find((c) => c.id === id)} />
+                </span>
+              ))}
           </div>
           <p className="note">
             Flags fill as each country finishes. Results are cached in this
-            browser. You can stop and resume with Calculate all.
+            browser. You can stop and resume with Calculate remaining.
           </p>
         </section>
       )}
-      <div className="lab-top">
-        <div className="surface lab-chart">
-          <div className="card-heading">
-            <div>
-              <span className="section-eyebrow">THE ACCURACY CURVE</span>
-              <h2>Detail takes a little more.</h2>
-            </div>
-            <CountryPicker
-              countries={countries}
-              selected={country}
-              onChange={setCountry}
-              compact
-            />
-          </div>
-          <Chart
-            points={selected?.curve || []}
-            target={95}
-            max={settings.cap}
-            current={terms}
-          />
-          <div className="chart-foot">
-            <span>
-              <span className="legend-dot" /> Measured similarity{" "}
-              <span className="dashed-legend" /> 95% reference
-            </span>
-            <button
-              className="text-button"
-              disabled={running}
-              onClick={() => compute([country])}
-            >
-              {selected ? "Recalculate" : "Calculate country"}{" "}
-              <ArrowRight size={14} />
-            </button>
-          </div>
-        </div>
+      <div
+        className={`lab-top ${showingLive ? "is-calculating" : ""}`}
+        aria-busy={showingLive && !liveAnalysis}
+      >
+        <TermRanking
+          rows={rows}
+          countries={datasetCountries}
+          step={settings.step}
+          onSelect={setCountry}
+        />
         <div className="surface experiment">
           <div className="card-heading">
-            <h2>Your experiment</h2>
-            <span className="small-tag">LIVE</span>
+            <h2>{showingLive ? "Building the border" : "Your experiment"}</h2>
+            <span
+              className={`small-tag ${showingLive ? "live-calculation-tag" : ""}`}
+            >
+              {showingLive ? "CALCULATING" : "LIVE"}
+            </span>
           </div>
           <div className="experiment-canvas">
+            {showingLive && (
+              <div className="live-drawing-caption">
+                <Flag country={liveCountry} />
+                <strong>{liveCountry?.name || activeCountry}</strong>
+                <span>
+                  {displayTerms ? `N = ${displayTerms}` : "Preparing…"}
+                </span>
+              </div>
+            )}
             <FourierCanvas
-              analysis={preview.analysis}
+              analysis={displayAnalysis}
               appearance={{
                 ...appearance,
                 grid: false,
-                zoom: 0.85,
+                zoom: showingLive ? 1 : 0.85,
                 fullTrace: true,
+                ...(showingLive
+                  ? { circles: true, arms: true, tip: true, reference: true }
+                  : {}),
               }}
-              clock={clock}
+              clock={showingLive ? liveClock : clock}
               dark={dark}
-              label={`${country} reconstruction experiment`}
+              label={
+                showingLive
+                  ? `${liveCountry?.name || activeCountry} building with ${displayTerms ?? 0} Fourier terms`
+                  : `${country} reconstruction experiment`
+              }
             />
+            {showingLive && !liveAnalysis && (
+              <div className="live-drawing-loading">
+                <LoaderCircle size={24} />
+                <span>Preparing this outline</span>
+              </div>
+            )}
           </div>
-          <Slider
-            label="Term budget"
-            value={terms}
-            min={1}
-            max={Math.min(settings.cap, settings.samples)}
-            onChange={onTerms}
-          />
+          {showingLive ? (
+            <div className="live-term-progress">
+              <div>
+                <span>Adding Fourier detail</span>
+                <strong>
+                  {displayTerms ? `N = ${displayTerms}` : "—"}
+                  <small> / {limit}</small>
+                </strong>
+              </div>
+              <div className="live-term-track">
+                <i
+                  style={{ width: `${((displayTerms ?? 0) / limit) * 100}%` }}
+                />
+              </div>
+              <p>Each shape is the actual result at this N.</p>
+            </div>
+          ) : (
+            <Slider
+              label="Term budget"
+              value={terms}
+              min={1}
+              max={Math.min(settings.cap, settings.samples)}
+              onChange={onTerms}
+            />
+          )}
           <div className="experiment-stats">
             <div>
               <small>Similarity</small>
               <b>
-                {preview.busy
+                {displayBusy
                   ? "…"
-                  : preview.analysis?.metrics.similarity.toFixed(2)}
+                  : displayAnalysis?.metrics.similarity.toFixed(2)}
                 <em>%</em>
               </b>
             </div>
             <div>
               <small>Mean boundary error</small>
               <b>
-                {preview.busy ? "…" : preview.analysis?.metrics.mean.toFixed(2)}
+                {displayBusy ? "…" : displayAnalysis?.metrics.mean.toFixed(2)}
                 <em>%</em>
               </b>
             </div>
@@ -447,7 +509,23 @@ export function DifficultyLab({
                 <th>95% terms</th>
                 <th>99% terms</th>
                 <th>Best tested</th>
-                <th>Components</th>
+                <th>
+                  <span className="components-heading">
+                    Components{" "}
+                    <span
+                      className="help"
+                      tabIndex={0}
+                      role="img"
+                      aria-label="Separate land areas in the map dataset, such as mainland and islands. Counts all land areas even when only the main outline is drawn. Not Fourier terms."
+                      title="Separate land areas in the dataset: mainland and islands. Includes all areas even in Main outline mode. This is not the number of Fourier terms."
+                    >
+                      <Info size={12} />
+                    </span>
+                  </span>
+                  <small className="components-caption">
+                    Separate land areas
+                  </small>
+                </th>
                 <th />
               </tr>
             </thead>
@@ -494,14 +572,22 @@ export function DifficultyLab({
                   <td>
                     <button
                       className="text-button"
-                      disabled={running}
+                      disabled={running || Boolean(row)}
                       onClick={() => {
                         setCountry(c.id);
                         compute([c.id]);
                       }}
                     >
-                      {row ? "Recalculate" : "Calculate"}{" "}
-                      <ArrowRight size={13} />
+                      {row ? (
+                        <>
+                          <Check size={13} />
+                          Calculated
+                        </>
+                      ) : (
+                        <>
+                          Calculate <ArrowRight size={13} />
+                        </>
+                      )}
                     </button>
                   </td>
                 </tr>
@@ -547,6 +633,7 @@ function SquareIcon() {
   return <span className="square-icon" />;
 }
 function CompareCard({
+  color,
   id,
   countries,
   onChange,
@@ -561,6 +648,7 @@ function CompareCard({
   onTerm,
   result,
 }: {
+  color: string;
   id: string;
   countries: Country[];
   onChange: (id: string) => void;
@@ -604,7 +692,7 @@ function CompareCard({
       <div className="compare-canvas">
         <FourierCanvas
           analysis={analysis}
-          appearance={{ ...appearance, zoom: 0.9, fullTrace: true }}
+          appearance={{ ...appearance, color, zoom: 0.9, fullTrace: true }}
           clock={clock}
           dark={dark}
           label={`${id}, ${terms} Fourier terms`}
@@ -739,6 +827,7 @@ export function CompareView({
   const value = (id: string) =>
       mode === "accuracy" ? results[id]?.best.terms : metrics[id],
     maxValue = mode === "accuracy" ? settings.cap : 100;
+  const colors = useMemo(() => compareColors(ids, dark), [ids.join(":"), dark]);
   return (
     <div className="compare-view">
       <div className="view-heading">
@@ -864,6 +953,7 @@ export function CompareView({
       <div className={`compare-grid count-${ids.length}`}>
         {ids.map((id, i) => (
           <CompareCard
+            color={colors[i]}
             key={i}
             id={id}
             countries={countries}
@@ -897,6 +987,13 @@ export function CompareView({
           />
         ))}
       </div>
+      <CompareAccuracy
+        colors={colors}
+        ids={ids}
+        countries={countries}
+        config={config}
+        settings={settings}
+      />
       <div className="surface comparison-chart">
         <div className="card-heading">
           <div>
@@ -926,6 +1023,7 @@ export function CompareView({
                   style={{
                     width: `${((value(id) || 0) / maxValue) * 100}%`,
                     opacity: 1 - i * 0.12,
+                    background: colors[i],
                   }}
                 />
               </div>

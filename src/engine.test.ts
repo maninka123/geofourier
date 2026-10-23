@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { constructionAt, constructionSequence } from "./construction";
+import { rankTermsFor99 } from "./rankingData";
+import { compareColors } from "./compareColors";
 import {
   coefficients,
   fft,
@@ -17,6 +19,88 @@ import {
 } from "./engine";
 const geometry = (id: string) =>
   JSON.parse(fs.readFileSync(`public/data/50m-${id}.json`, "utf8")) as Geometry;
+
+test("comparison colours stay distinct when flags share their dominant colour", () => {
+  for (const ids of [
+    ["CAN", "JPN", "POL", "IDN"],
+    ["AUS", "NZL", "GBR", "FRA"],
+    ["LKA", "AUS", "NOR", "BRA"],
+    ["LKA", "LKA", "LKA", "LKA"],
+  ]) {
+    for (const dark of [false, true]) {
+      const colors = compareColors(ids, dark);
+      assert.equal(new Set(colors).size, ids.length);
+      assert.ok(colors.every((c) => /^#[0-9a-f]{6}$/.test(c)));
+      assert.deepEqual(colors, compareColors(ids, dark));
+    }
+  }
+});
+
+test("99-percent term ranking sorts measured counts and distinguishes budget limits", () => {
+  const p = (terms: number, similarity: number) => ({
+    terms,
+    similarity,
+    iou: similarity,
+    mean: 0,
+  });
+  const rows = [
+    {
+      id: "AAA",
+      curve: [p(1, 70), p(21, 99.1), p(31, 98.9)],
+      cap: 100,
+      complete: true,
+    },
+    { id: "BBB", curve: [p(1, 80), p(11, 99.2)], cap: 100, complete: true },
+    { id: "CCC", curve: [p(1, 60), p(100, 98.5)], cap: 100, complete: true },
+    { id: "DDD", curve: [p(1, 50), p(21, 90)], cap: 100, complete: false },
+  ];
+  assert.deepEqual(
+    rankTermsFor99(rows).map((r) => [r.row.id, r.terms]),
+    [
+      ["BBB", 11],
+      ["AAA", 21],
+      ["CCC", undefined],
+    ],
+  );
+  assert.deepEqual(
+    rankTermsFor99(rows, true).map((r) => r.row.id),
+    ["CCC", "AAA", "BBB"],
+  );
+  assert.equal(
+    rankTermsFor99(
+      Array.from({ length: 30 }, (_, i) => ({ ...rows[0], id: String(i) })),
+    ).length,
+    20,
+  );
+});
+
+test("search previews contain the exact geometry and metrics of each tested N", async () => {
+  const model = prepare(geometry("LKA"), 256, "main");
+  const seen: number[] = [];
+  const result = await search(
+    model,
+    101,
+    31,
+    10,
+    10000,
+    (point, _best, evaluations, _elapsed, preview) => {
+      seen.push(preview.terms);
+      assert.equal(preview.model, model);
+      assert.equal(preview.terms, point.terms);
+      assert.equal(preview.metrics.similarity, point.similarity);
+      assert.equal(evaluations, seen.length);
+      assert.deepEqual(
+        preview.paths,
+        model.contours.map((c) => reconstruct(c, point.terms)),
+      );
+    },
+  );
+  assert.deepEqual(
+    seen,
+    result.curve.map((p) => p.terms),
+  );
+  assert.deepEqual(seen, [1, 11, 21, 31]);
+});
 test("radix-2 FFT round-trips a complex signal", () => {
   const re = Array.from({ length: 256 }, (_, i) => Math.sin(i * 0.4) + i / 100),
     im = re.map((_, i) => Math.cos(i * 0.17)),

@@ -8,12 +8,12 @@
 
 | Difficulty Lab                                                      | Country Compare                                                     |
 | ------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| ![Measured country difficulty](docs/screenshots/difficulty-lab.jpg) | ![Sri Lanka and Australia comparison](docs/screenshots/compare.jpg) |
+| ![Measured country difficulty](docs/screenshots/difficulty-lab.jpg) | ![Accuracy curves for every selected country](docs/screenshots/compare-curves.jpg) |
 
-- **Studio:** choose N or target similarity; watch eight construction levels by default, trace at a fixed N, or show the final shape. Each construction level completes a loop; the final N keeps looping.
+- **Studio:** choose N or target similarity, watch eight construction levels by default, and explore a compact measured accuracy curve. Each level completes a loop; the final N keeps looping.
 - **Equation explorer:** click the N statistic for the actual Fourier equation, animated x(t)/y(t) graphs, and coefficients displayed to two decimal places. [Preview](docs/screenshots/equation.jpg).
-- **Difficulty Lab:** analyze one country, a starter set, or the entire dataset, with flag progress and locally cached results.
-- **Compare:** two to four countries, equal terms or equal accuracy, with synchronized playback.
+- **Difficulty Lab:** calculate remaining countries, watch each real intermediate reconstruction, and rank the first 20 by terms needed for 99% similarity. Results are cached locally.
+- **Compare:** two to four countries with synchronized playback, distinct flag-derived drawing colours, and an accuracy-versus-N curve for every selected country. [Curve preview](docs/screenshots/compare-curves.jpg).
 - **Export:** PNG, SVG, WebM, settings, coefficients, and measured CSV data. Shareable URLs and local presets included.
 
 ```sh
