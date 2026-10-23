@@ -377,15 +377,16 @@ export async function search(
     analysis: Analysis,
   ) => void,
   isCancelled = () => false,
+  denseEarly = false,
 ): Promise<SearchResult> {
   const start = performance.now(),
     curve: CurvePoint[] = [];
   let best: CurvePoint = { terms: 1, similarity: -1, iou: 0, mean: 0 },
     reason: SearchResult["reason"] = "budget";
-  const counts = [];
-  for (let n = 1; n <= limit; n += step) counts.push(n);
-  if (counts.at(-1) !== limit) counts.push(limit);
-  for (const terms of counts) {
+  const counts = new Set<number>([limit]);
+  for (let n = 1; n <= limit; n += step) counts.add(n);
+  if (denseEarly) for (let n = 1; n <= Math.min(25, limit); n++) counts.add(n);
+  for (const terms of [...counts].sort((a, b) => a - b)) {
     if (isCancelled()) {
       reason = "cancelled";
       break;

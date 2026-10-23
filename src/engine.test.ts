@@ -4,6 +4,7 @@ import fs from "node:fs";
 import { constructionAt, constructionSequence } from "./construction";
 import { rankTermsFor99 } from "./rankingData";
 import { compareColors } from "./compareColors";
+import { termAxisPosition, termAxisTicks } from "./chartScale";
 import {
   coefficients,
   fft,
@@ -19,6 +20,40 @@ import {
 } from "./engine";
 const geometry = (id: string) =>
   JSON.parse(fs.readFileSync(`public/data/50m-${id}.json`, "utf8")) as Geometry;
+
+test("logarithmic term axis expands early detail without changing N values", () => {
+  assert.equal(termAxisPosition(1, 1000), 0);
+  assert.equal(termAxisPosition(1000, 1000), 1);
+  assert.ok(Math.abs(termAxisPosition(10, 1000) - 1 / 3) < 1e-12);
+  assert.ok(Math.abs(termAxisPosition(100, 1000) - 2 / 3) < 1e-12);
+  assert.ok(
+    termAxisPosition(10, 500) - termAxisPosition(1, 500) >
+      termAxisPosition(500, 500) - termAxisPosition(400, 500),
+  );
+  assert.equal(termAxisPosition(0, 500), 0);
+  assert.equal(termAxisPosition(1001, 500), 1);
+  assert.equal(termAxisPosition(1, 1), 0);
+});
+
+test("logarithmic term ticks retain endpoints and avoid label collisions", () => {
+  for (const limit of [1, 100, 250, 500, 1000])
+    for (const width of [186, 300, 700, 1400]) {
+      const ticks = termAxisTicks(limit, width);
+      assert.equal(ticks[0], 1);
+      assert.equal(ticks.at(-1), limit);
+      assert.equal(new Set(ticks).size, ticks.length);
+      assert.ok(
+        ticks.every((n) => Number.isInteger(n) && n >= 1 && n <= limit),
+      );
+      for (let i = 1; i < ticks.length; i++)
+        assert.ok(
+          (termAxisPosition(ticks[i], limit) -
+            termAxisPosition(ticks[i - 1], limit)) *
+            width >=
+            (String(ticks[i]).length + String(ticks[i - 1]).length) * 3.5 + 12,
+        );
+    }
+});
 
 test("comparison colours stay distinct when flags share their dominant colour", () => {
   for (const ids of [
@@ -230,6 +265,39 @@ test("unreachable target returns the actual best measured result within its budg
     analyze(model, result.best.terms).metrics.similarity,
   );
 });
+test("accuracy curves measure every early N and retain the later grid and cap", async () => {
+  const model = prepare(geometry("EGY"), 64);
+  for (const limit of [12, 34]) {
+    const result = await search(
+      model,
+      101,
+      limit,
+      10,
+      5000,
+      () => {},
+      () => false,
+      true,
+    );
+    const counts = result.curve.map((p) => p.terms);
+    assert.deepEqual(
+      counts.filter((n) => n <= 25),
+      Array.from({ length: Math.min(25, limit) }, (_, i) => i + 1),
+    );
+    assert.equal(counts.at(-1), limit);
+    assert.equal(new Set(counts).size, counts.length);
+    if (limit > 25)
+      assert.deepEqual(
+        counts.filter((n) => n > 25),
+        [31, 34],
+      );
+    for (const point of result.curve)
+      assert.equal(
+        point.similarity,
+        analyze(model, point.terms).metrics.similarity,
+      );
+  }
+});
+
 test("target search verifies first qualifying count on the entire tested grid", async () => {
   const model = prepare(geometry("EGY"), 128),
     result = await search(model, 90, 100, 2, 5000, () => {});

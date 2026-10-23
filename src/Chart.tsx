@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { CurvePoint } from "./engine";
+import { termAxisPosition, termAxisTicks } from "./chartScale";
 export default function Chart({
   points,
   target = 98,
@@ -35,11 +36,27 @@ export default function Chart({
     right = 24,
     top = 24,
     bottom = 38,
-    x = (n: number) => left + (n / max) * (w - left - right),
+    x = (n: number) => left + termAxisPosition(n, max) * (w - left - right),
     y = (n: number) => top + ((100 - n) / 100) * (h - top - bottom);
   return (
     <div className={`chart ${compact ? "compact-chart" : ""}`} ref={container}>
-      <svg viewBox={`0 0 ${w} ${h}`} role="img" aria-label={label}>
+      <svg
+        viewBox={`0 0 ${w} ${h}`}
+        role="img"
+        aria-label={`${label}. Logarithmic Fourier term axis, expanding early detail.`}
+      >
+        {termAxisTicks(max, w - left - right).map((n) => (
+          <line
+            key={`grid-${n}`}
+            x1={x(n)}
+            x2={x(n)}
+            y1={top}
+            y2={h - bottom}
+            stroke="var(--border)"
+            strokeDasharray="2 5"
+            opacity=".7"
+          />
+        ))}
         {(compact ? [0, 50, 100] : [0, 25, 50, 75, 100]).map((n) => (
           <g key={n}>
             <line
@@ -54,9 +71,9 @@ export default function Chart({
             </text>
           </g>
         ))}
-        {[0, 0.25, 0.5, 0.75, 1].map((p) => (
-          <text key={p} x={x(max * p)} y={h - 10} textAnchor="middle">
-            {Math.round(max * p)}
+        {termAxisTicks(max, w - left - right).map((n) => (
+          <text key={n} x={x(n)} y={h - 10} textAnchor="middle">
+            {n}
           </text>
         ))}
         <line
@@ -171,7 +188,7 @@ export default function Chart({
           <b>{hover.similarity.toFixed(2)}%</b>
         </div>
       )}
-      <span className="axis-label">FOURIER TERMS</span>
+      <span className="axis-label">FOURIER TERMS · LOG SCALE</span>
     </div>
   );
 }

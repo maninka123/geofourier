@@ -111,11 +111,12 @@ export function runSearch(
   maxMs: number,
   progress: (p: Progress) => void,
   includePreview = false,
+  denseEarly = false,
 ) {
   return request<SearchResult>(
     "search",
     config,
-    { target, limit, step, maxMs, includePreview },
+    { target, limit, step, maxMs, includePreview, denseEarly },
     progress,
   );
 }

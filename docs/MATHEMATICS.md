@@ -32,6 +32,8 @@ Search evaluates increasing term counts on the configured grid, includes the ter
 
 “Not reached” describes the tested budget, not theoretical impossibility. A complete finite Fourier basis can reconstruct its own sampled contour.
 
+Studio and Compare accuracy curves use a logarithmic term axis starting at N = 1, so early changes have more space. These curve calculations additionally measure every integer N from 1–25 (within the term cap), then retain the configured search grid and final cap. Displayed percentages and the linear 0–100% similarity axis are unchanged.
+
 Difficulty Lab scans the configured grid up to its budget. Its score is:
 
 `80 × min(N95 / term cap, 1) + 20 × normalized spectral energy entropy`

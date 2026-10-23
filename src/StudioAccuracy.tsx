@@ -18,7 +18,7 @@ export default function StudioAccuracy({
   current: number;
   searchCurve: CurvePoint[];
 }) {
-  const key = `forma-studio-curve-v1-${Object.values(config).join("-")}-${settings.cap}-${settings.step}`;
+  const key = `forma-studio-curve-v2-${Object.values(config).join("-")}-${settings.cap}-${settings.step}`;
   const [data, setData] = useState<{ key: string; points: CurvePoint[] }>(),
     [running, setRunning] = useState(false),
     [error, setError] = useState("");
@@ -31,12 +31,47 @@ export default function StudioAccuracy({
       const saved = JSON.parse(localStorage.getItem(key) || "null");
       const labKey = `forma-lab-v3-${config.resolution}-${config.samples}-${config.mode}-${settings.cap}-${settings.step}`;
       const labRows = JSON.parse(localStorage.getItem(labKey) || "[]");
-      const points =
+      const points: CurvePoint[] | undefined =
         saved ??
+        JSON.parse(
+          localStorage.getItem(key.replace("-v2-", "-v1-")) || "null",
+        ) ??
         labRows.find(
           (r: { id: string; curve: CurvePoint[] }) => r.id === config.country,
         )?.curve;
       setData(points ? { key, points } : undefined);
+      if (points?.length && !saved) {
+        const v = ++version.current;
+        setRunning(true);
+        const early = runSearch(
+          config,
+          101,
+          Math.min(25, settings.cap, settings.samples),
+          1,
+          settings.maxTime * 1000,
+          () => {},
+        );
+        job.current = early;
+        void early.promise
+          .then((result) => {
+            if (v !== version.current) return;
+            const merged = [
+              ...new Map(
+                [...points, ...result.curve].map((p) => [p.terms, p]),
+              ).values(),
+            ].sort((a, b) => a.terms - b.terms);
+            setData({ key, points: merged });
+            if (result.reason === "budget")
+              localStorage.setItem(key, JSON.stringify(merged));
+          })
+          .catch((e) => {
+            if (v === version.current)
+              setError(e instanceof Error ? e.message : String(e));
+          })
+          .finally(() => {
+            if (v === version.current) setRunning(false);
+          });
+      }
     } catch {
       setData(undefined);
     }
@@ -67,6 +102,8 @@ export default function StudioAccuracy({
           points.push(p.point);
           setData({ key, points: [...points] });
         },
+        false,
+        true,
       );
       const result = await job.current.promise;
       if (v !== version.current) return;
@@ -100,7 +137,7 @@ export default function StudioAccuracy({
         key={key}
         compact
         points={points}
-        max={settings.cap}
+        max={Math.min(settings.cap, settings.samples)}
         current={current}
         target={99}
       />

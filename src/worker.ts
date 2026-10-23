@@ -59,6 +59,7 @@ self.onmessage = async ({ data }) => {
           });
         },
         () => cancelled.has(id),
+        data.denseEarly,
       );
       cancelled.delete(id);
       self.postMessage({ id, result });

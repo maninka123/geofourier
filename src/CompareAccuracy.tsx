@@ -58,6 +58,8 @@ export default function CompareAccuracy({
                 curves[id] = [...points];
                 setData({ key, curves: { ...curves } });
               },
+              false,
+              true,
             );
             jobs.push(job);
             const result = await job.promise;
@@ -132,13 +134,14 @@ export default function CompareAccuracy({
         points={[]}
         series={series}
         target={99}
-        max={settings.cap}
+        max={Math.min(settings.cap, settings.samples)}
         label="Measured similarity versus Fourier terms for all selected countries"
       />
       <p className="note">
         Measured similarity (%) versus Fourier terms per contour. All selected
-        countries use the same dataset, sampling and {settings.step}-term search
-        grid. Hover a point for its value.
+        countries use the same dataset and sampling: every N from 1–25, then the{" "}
+        {settings.step}-term grid. The logarithmic N axis gives early detail
+        more space. Hover a point for its value.
       </p>
       {error && (
         <p className="note" role="alert">
