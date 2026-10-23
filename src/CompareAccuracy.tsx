@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, Square } from "lucide-react";
+import { LoaderCircle, Check } from "lucide-react";
 import Chart from "./Chart";
 import { Flag } from "./CountryPicker";
 import { runSearch, type Config } from "./client";
@@ -25,59 +25,68 @@ export default function CompareAccuracy({
     }>(),
     [running, setRunning] = useState(false),
     [error, setError] = useState("");
-  const jobs = useRef<ReturnType<typeof runSearch>[]>([]),
-    version = useRef(0);
+  const version = useRef(0),
+    cache = useRef(new Map<string, CurvePoint[]>());
   useEffect(() => {
-    setRunning(false);
-    setError("");
-    return () => {
-      version.current++;
-      jobs.current.forEach((j) => j.cancel());
-    };
-  }, [key]);
-  const calculate = async () => {
-    if (running) {
-      jobs.current.forEach((j) => j.cancel());
-      return;
-    }
     const v = ++version.current;
-    setRunning(true);
+    const jobs: ReturnType<typeof runSearch>[] = [];
     setError("");
     const curves: Record<string, CurvePoint[]> = {};
-    jobs.current = [];
-    setData({ key, curves: {} });
-    try {
-      await Promise.all(
-        [...new Set(ids)].map(async (id) => {
-          const points: CurvePoint[] = [];
-          const job = runSearch(
-            { ...config, country: id },
-            101,
-            Math.min(settings.cap, settings.samples),
-            settings.step,
-            settings.maxTime * 1000,
-            (p) => {
-              if (v !== version.current) return;
-              points.push(p.point);
-              curves[id] = [...points];
-              setData({ key, curves: { ...curves } });
-            },
-          );
-          jobs.current.push(job);
-          const result = await job.promise;
-          if (v === version.current) {
-            curves[id] = result.curve;
-            setData({ key, curves: { ...curves } });
-          }
-        }),
-      );
-    } catch (e) {
-      if (v === version.current)
-        setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      if (v === version.current) setRunning(false);
+    const countryKey = (id: string) =>
+      `${id}-${config.resolution}-${config.samples}-${config.mode}-${settings.cap}-${settings.step}-${settings.maxTime}`;
+    for (const id of ids) {
+      const saved = cache.current.get(countryKey(id));
+      if (saved) curves[id] = saved;
     }
-  };
+    setData({ key, curves: { ...curves } });
+    setRunning(ids.some((id) => !curves[id]));
+    const calculate = async () => {
+      try {
+        await Promise.all(
+          [...new Set(ids)].map(async (id) => {
+            if (curves[id]) return;
+            const points: CurvePoint[] = [];
+            const job = runSearch(
+              { ...config, country: id },
+              101,
+              Math.min(settings.cap, settings.samples),
+              settings.step,
+              settings.maxTime * 1000,
+              (p) => {
+                if (v !== version.current) return;
+                points.push(p.point);
+                curves[id] = [...points];
+                setData({ key, curves: { ...curves } });
+              },
+            );
+            jobs.push(job);
+            const result = await job.promise;
+            if (v === version.current) {
+              curves[id] = result.curve;
+              if (result.reason === "budget") {
+                cache.current.set(countryKey(id), result.curve);
+                if (cache.current.size > 32)
+                  cache.current.delete(cache.current.keys().next().value!);
+              }
+              setData({ key, curves: { ...curves } });
+            }
+          }),
+        );
+      } catch (e) {
+        if (v === version.current) {
+          setError(e instanceof Error ? e.message : String(e));
+          jobs.forEach((j) => j.cancel());
+        }
+      } finally {
+        if (v === version.current) setRunning(false);
+      }
+    };
+    void calculate();
+    return () => {
+      version.current++;
+      jobs.forEach((j) => j.cancel());
+    };
+  }, [key]);
   const curves = data?.key === key ? data.curves : {};
   const series = ids.map((id, i) => ({
     id: `${id}-${i}`,
@@ -95,19 +104,19 @@ export default function CompareAccuracy({
           <span className="section-eyebrow">ACCURACY AS DETAIL GROWS</span>
           <h2>Every country. The same scale.</h2>
         </div>
-        <button className="button secondary" onClick={() => void calculate()}>
+        <span className="auto-curve-status" role="status">
           {running ? (
             <>
-              <Square size={13} />
-              Stop curves
+              <LoaderCircle size={14} className="spin" />
+              Updating curves…
             </>
           ) : (
             <>
-              Calculate curves
-              <ArrowRight size={14} />
+              <Check size={14} />
+              Updates automatically
             </>
           )}
-        </button>
+        </span>
       </div>
       <div className="compare-curve-legend">
         {series.map((s, i) => (

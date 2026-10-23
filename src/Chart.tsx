@@ -159,7 +159,7 @@ export default function Chart({
       {points.length === 0 && !series.some((s) => s.points.length) && (
         <div className="chart-empty">
           {series.length
-            ? "Calculate curves to compare every selected country."
+            ? "Preparing curves for the selected countries…"
             : compact
               ? "Calculate to see how similarity changes with N."
               : "Run an analysis to reveal the measured accuracy curve."}

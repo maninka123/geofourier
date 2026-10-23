@@ -6,14 +6,14 @@
 
 ![Forma Studio — Sri Lanka](docs/screenshots/studio.jpg)
 
-| Difficulty Lab                                                      | Country Compare                                                     |
-| ------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| Difficulty Lab                                                      | Country Compare                                                                    |
+| ------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
 | ![Measured country difficulty](docs/screenshots/difficulty-lab.jpg) | ![Accuracy curves for every selected country](docs/screenshots/compare-curves.jpg) |
 
 - **Studio:** choose N or target similarity, watch eight construction levels by default, and explore a compact measured accuracy curve. Each level completes a loop; the final N keeps looping.
 - **Equation explorer:** click the N statistic for the actual Fourier equation, animated x(t)/y(t) graphs, and coefficients displayed to two decimal places. [Preview](docs/screenshots/equation.jpg).
-- **Difficulty Lab:** calculate remaining countries, watch each real intermediate reconstruction, and rank the first 20 by terms needed for 99% similarity. Results are cached locally.
-- **Compare:** two to four countries with synchronized playback, distinct flag-derived drawing colours, and an accuracy-versus-N curve for every selected country. [Curve preview](docs/screenshots/compare-curves.jpg).
+- **Difficulty Lab:** calculate remaining countries, watch real intermediate reconstructions, and explore an animated flag line chart of the first 20 by terms needed for 99% similarity. Results are cached locally.
+- **Compare:** two to four countries with synchronized playback and distinct flag-derived colours. Accuracy curves calculate automatically as countries are added, removed, or changed. [Curve preview](docs/screenshots/compare-curves.jpg).
 - **Export:** PNG, SVG, WebM, settings, coefficients, and measured CSV data. Shareable URLs and local presets included.
 
 ```sh
