@@ -18,7 +18,7 @@ export default function TermRanking({
   selectedId: string;
   onSelect: (id: string) => void;
 }) {
-  const [order, setOrder] = useState("fewer"),
+  const [order, setOrder] = useState("more"),
     [active, setActive] = useState("");
   const ranked = useMemo(
     () => rankTermsFor99(rows, order === "more"),

@@ -42,12 +42,30 @@ The spectral entropy uses the first selected contour's nonconstant coefficient e
 
 ## Animation
 
-Full construction uses eight distinct increasing N levels by default. Users can select 2–20 levels, limited by the available integer N values. Levels are spaced approximately logarithmically. Every level completes one entire contour cycle before advancing. Once the final N is reached, subsequent cycles retain it. Cycle duration and playback speed remain independent; repeat limits apply to the final level.
+Full construction uses eight distinct increasing N levels by default. Users can select 2–20 levels, limited by the available integer N values. Levels are spaced approximately logarithmically. Every level completes one entire contour cycle before advancing. Once the final N is reached, subsequent cycles retain it. Playback defaults to 2× (10 seconds per outline with the standard 20-second base); one speed control displays the resulting duration. Repeat limits apply to the final level. Shared URLs can retain a previously chosen base duration.
 
 Fixed-N tracing uses the selected N on every loop. Final-shape mode presents the completed reconstruction immediately. Reduced-motion preferences default to final-shape mode.
 
 ## Performance & exports
 
+Calculation times in Compare measure Fourier reconstruction and scoring, excluding fetch and preparation. Cached results retain their original timing. Difficulty Lab reports the complete curve-search elapsed time, including scoring and scheduling yields. These are device-specific observations, not portable benchmark rankings.
+
 Projection, FFTs, scoring, and optimization run in a Web Worker. Geometry and measured reconstructions use bounded in-memory caches. Stale UI responses are ignored; searches support cancellation. All geographic data and fonts are served locally. Flags have a neutral fallback.
 
 PNG and WebM use the Canvas renderer, with stroke widths scaled independently of export resolution. SVG exports completed vector paths. Settings and coefficients are JSON; accuracy results are CSV. WebM is offered only where the browser supports recording. No MP4 or GIF encoding is claimed.
+
+## Validation and individual components
+
+The Studio validation panel uses the selected final N, independently of the current animation construction level. Its sampled score uses the uniform arc-length FFT input. Its dataset score compares the reconstruction with the original projected map rings, using the same approximate raster overlap and bidirectional boundary scoring. Neither is a geodesic or real-coastline accuracy estimate.
+
+The heatmap measures reconstructed vertices against the closest original boundary segments. Maximum-deviation markers also check the reverse direction using up to 1,024 uniform samples per reference contour. Values are percentages of the projected country diagonal. These sampled maximum deviations are not an exact continuous Hausdorff distance.
+
+The convergence plots show sampled mean boundary error and retained nonconstant Fourier energy. Translation coefficients are excluded from energy. The small-gains indicator reports average error reduction per ten terms over the last three plotted levels through the selected N; fluctuations can occur. Sampling sensitivity repeats the same N at 256, 512, 1,024 and 2,048 longest-contour samples against the same dataset reference. Each contour can use only as many terms as it has coefficients.
+
+The Components popup lists exterior land areas and associates their interior holes with them. Component similarity is scored in a local frame so small islands remain visible to the raster calculation; mean and maximum distances are converted back to percentages of the whole-country diagonal. Component names are used only when supplied by the input. Natural Earth files bundled here do not contain individual island names.
+
+## Custom boundaries
+
+Custom Shapes accepts GeoJSON polygons/multipolygons and line outlines, SVG paths and basic shapes, and two-column CSV. SVG is parsed as geometry and is never inserted as executable markup. SVG transforms are applied; nested outlines use even-odd containment. CSV blank lines separate paths. GeoJSON preserves its polygon/hole structure and feature names. Open paths are closed only after user confirmation, with a straight final edge.
+
+Uploads are limited to 2 MB, 50,000 points and 128 exterior areas; invalid, nonfinite and degenerate coordinates are rejected. SVG curves are discretized to at most 2,048 points per subpath before Fourier resampling. SVG and drawings preserve screen orientation; x,y CSV uses a positive-up y axis, and longitude,latitude CSV uses geographic projection. Drawings support separate closed outlines, nested holes and reversible editing. Geometry remains local to the browser.

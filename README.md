@@ -1,31 +1,28 @@
 # Forma
 
-**The mathematics of borders.** Real country outlines, reconstructed with rotating Fourier epicycles.
+**Country borders and custom shapes, drawn with Fourier series.**
 
-### [Open the live app ↗](https://maninka123.github.io/geofourier/)
+[Open the live app](https://maninka123.github.io/geofourier/)
 
-![Forma Studio — Sri Lanka](docs/screenshots/studio.jpg)
+![Forma Custom Shapes - engineering profiles](docs/screenshots/custom-shapes.jpg)
 
-| Difficulty Lab                                                      | Country Compare                                                                    |
-| ------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| ![Measured country difficulty](docs/screenshots/difficulty-lab.jpg) | ![Accuracy curves for every selected country](docs/screenshots/compare-curves.jpg) |
+- **Studio:** animated construction, equations, boundary-error heatmap, maximum-deviation markers, convergence and sampling checks.
+- **Difficulty Lab:** all-country ranking, component counts and sortable calculation times.
+- **Compare:** shared or individual N, distinct flag colours, automatic accuracy curves and a sortable metrics table.
+- **Custom Shapes:** GeoJSON, SVG, CSV or a drawing. Pen, polygon, eraser, undo and redo; disconnected outlines and holes stay separate.
+- **Playback & export:** 2× by default, one speed control from 0.5× to 8×; PNG, SVG, WebM, JSON and CSV exports.
 
-- **Studio:** choose N or target similarity, watch eight construction levels by default, and explore a compact measured accuracy curve. Each level completes a loop; the final N keeps looping.
-- **Equation explorer:** click the N statistic for the actual Fourier equation, animated x(t)/y(t) graphs, and coefficients displayed to two decimal places. [Preview](docs/screenshots/equation.jpg).
-- **Difficulty Lab:** watch intermediate reconstructions beside the chart, then explore all measured countries in a full-width scrolling flag chart. Select table countries in a fixed side preview and open them in Studio. [Country preview](docs/screenshots/country-preview.jpg).
-- **Visual settings:** compact controls with matching coastline resolution previews, Japan’s islands, and South Africa’s interior hole. [Preview](docs/screenshots/settings-previews.jpg).
-- **Playback:** drag between marked speeds up to 8×; cycle time stays linked in both directions. [Preview](docs/screenshots/playback.jpg).
-- **Studio accuracy:** a full-width curve below a shallow spectrum panel updates automatically for the selected country and computation settings, with no calculate button. [Preview](docs/screenshots/studio-accuracy.jpg).
-- **Compare:** two to four countries with synchronized playback and distinct flag-derived colours. Accuracy curves update automatically; logarithmic N axes and every N from 1–25 in Studio and Compare reveal early detail. [Curve preview](docs/screenshots/compare-curves.jpg).
-- **Export:** PNG, SVG, WebM, settings, coefficients, and measured CSV data. Shareable URLs and local presets included.
+Uploads stay in your browser. Limits: **2 MB, 50,000 points, 128 separate areas**. Open paths require confirmation before closing. SVG and drawings retain screen orientation; CSV uses x,y or longitude,latitude headers. Names appear when supplied by the source.
 
 ```sh
 npm ci
 npm run dev
 ```
 
-`npm test` runs the mathematics and construction tests. `npm run build` produces the static app in `dist/`. Pushes to `main` test, build, and deploy through GitHub Actions to GitHub Pages.
+`npm test` checks the mathematics, imports and validation. `npm run build` produces `dist/`. Pushes to `main` test, build and deploy to GitHub Pages.
 
-**Built with:** React, strict TypeScript, Vite, Motion, Canvas 2D, and a Web Worker FFT engine. No backend or API key required.
+**Measurements:** similarity combines silhouette overlap (70%) and boundary score (30%). Studio distinguishes sampled-contour accuracy from the original map dataset; neither is real-world coastline accuracy. Timings are device-specific. [Methods and limits](docs/MATHEMATICS.md).
 
-**Data & scoring:** [Natural Earth](https://github.com/nvkelso/natural-earth-vector), public domain; 242 countries/territories at 1:50m and 177 at 1:110m. Similarity combines measured silhouette overlap (70%) and normalized bidirectional boundary distance (30%). [Mathematics and limitations →](docs/MATHEMATICS.md) Flags: [FlagCDN](https://flagcdn.com/).
+**Built with:** React, TypeScript, Vite, Canvas and a Web Worker FFT engine. No backend or API key.
+
+**Map data:** [Natural Earth](https://github.com/nvkelso/natural-earth-vector), public domain. 242 countries/territories at 1:50m, 177 at 1:110m. [Flags](https://flagcdn.com/).

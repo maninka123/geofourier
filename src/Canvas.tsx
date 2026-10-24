@@ -162,10 +162,11 @@ export function draw(
       ctx.lineCap = "round";
       if (o.heatmap) {
         for (let j = Math.max(1, start); j <= end; j++) {
-          const e = Math.hypot(
-            points[j][0] - contour.points[j][0],
-            points[j][1] - contour.points[j][1],
-          );
+          const e =
+            Math.hypot(
+              points[j][0] - contour.points[j][0],
+              points[j][1] - contour.points[j][1],
+            ) / a.model.diagonal;
           ctx.strokeStyle =
             e < 0.01 ? o.color : e < 0.035 ? "#d8a04d" : "#d56868";
           path(ctx, [points[j - 1], points[j]], scale, false);

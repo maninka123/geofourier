@@ -137,12 +137,7 @@ export default function CompareAccuracy({
         max={Math.min(settings.cap, settings.samples)}
         label="Measured similarity versus Fourier terms for all selected countries"
       />
-      <p className="note">
-        Measured similarity (%) versus Fourier terms per contour. All selected
-        countries use the same dataset and sampling: every N from 1–25, then the{" "}
-        {settings.step}-term grid. The logarithmic N axis gives early detail
-        more space. Hover a point for its value.
-      </p>
+      <p className="note">Similarity by terms · same dataset and sampling.</p>
       {error && (
         <p className="note" role="alert">
           {error}

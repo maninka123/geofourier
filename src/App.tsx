@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
   Activity,
@@ -63,6 +70,10 @@ import { SimilarityExplainer, LearningExplainer } from "./Explainers";
 import Playback from "./Playback";
 import { nearestPlaybackSpeed } from "./playbackSpeed";
 import Equation from "./Equation";
+import Modal from "./Modal";
+import Components from "./Components";
+const StudioValidation = lazy(() => import("./StudioValidation"));
+const CustomShapes = lazy(() => import("./CustomShapes"));
 import { constructionAt, type BuildMode } from "./construction";
 type Saved = {
   inputMode?: "terms" | "similarity";
@@ -93,7 +104,7 @@ function readState(): Partial<Saved> {
       country: /^[A-Z0-9]{3}$/.test(s.country) ? s.country : "LKA",
       terms: Math.max(1, Math.min(1000, Number(s.terms) || 150)),
       target: Math.max(70, Math.min(99.9, Number(s.target) || 98)),
-      speed: nearestPlaybackSpeed(Number(s.speed) || 1),
+      speed: nearestPlaybackSpeed(Number(s.speed) || 2),
       duration: [5, 10, 20, 30, 60, 120].includes(s.duration) ? s.duration : 20,
       loops: [1, 3, 5, 10].includes(s.loops) ? s.loops : 0,
       settings: {
@@ -132,87 +143,6 @@ function readState(): Partial<Saved> {
   }
 }
 const initial = readState();
-function Modal({
-  title,
-  children,
-  onClose,
-  wide = false,
-}: {
-  title: string;
-  children: React.ReactNode;
-  onClose: () => void;
-  wide?: boolean;
-}) {
-  const panel = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const prior = document.activeElement as HTMLElement;
-    const bodyOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const focusables = () =>
-      Array.from(
-        panel.current?.querySelectorAll<HTMLElement>(
-          'button,input,select,a[href],[tabindex="0"]',
-        ) || [],
-      ).filter((el) => !el.hasAttribute("disabled"));
-    focusables()[0]?.focus();
-    const key = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-      if (e.key === "Tab") {
-        const els = focusables(),
-          first = els[0],
-          last = els.at(-1);
-        if (e.shiftKey && document.activeElement === first) {
-          e.preventDefault();
-          last?.focus();
-        } else if (!e.shiftKey && document.activeElement === last) {
-          e.preventDefault();
-          first?.focus();
-        }
-      }
-    };
-    document.addEventListener("keydown", key);
-    return () => {
-      document.body.style.overflow = bodyOverflow;
-      document.removeEventListener("keydown", key);
-      prior?.focus();
-    };
-  }, []);
-  return (
-    <motion.div
-      className="modal-backdrop"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      onPointerDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <motion.div
-        ref={panel}
-        className={`modal ${wide ? "wide" : ""}`}
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        initial={{ opacity: 0, y: 16, scale: 0.98 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: 10, scale: 0.98 }}
-        transition={{ type: "spring", bounce: 0, duration: 0.3 }}
-      >
-        <div className="modal-header">
-          <h2>{title}</h2>
-          <button
-            className="icon-button"
-            aria-label="Close dialog"
-            onClick={onClose}
-          >
-            <X size={20} />
-          </button>
-        </div>
-        <div className="modal-body">{children}</div>
-      </motion.div>
-    </motion.div>
-  );
-}
 function FormulaMark() {
   return (
     <svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
@@ -242,7 +172,7 @@ export default function App() {
     [appearance, setAppearance] = useState<Appearance>(
       initial.appearance || defaultAppearance,
     ),
-    [speed, setSpeed] = useState(initial.speed || 1),
+    [speed, setSpeed] = useState(initial.speed || 2),
     [duration, setDuration] = useState(initial.duration || 20),
     [loops, setLoops] = useState(initial.loops || Infinity),
     [tab, setTab] = useState("Studio"),
@@ -647,22 +577,26 @@ export default function App() {
               </span>
             </a>
             <nav aria-label="Main navigation">
-              {["Studio", "Difficulty Lab", "Compare"].map((t, i) => (
-                <button
-                  key={t}
-                  className={tab === t ? "active" : ""}
-                  onClick={() => setTab(t)}
-                >
-                  {i === 0 ? (
-                    <Waves size={16} />
-                  ) : i === 1 ? (
-                    <Activity size={16} />
-                  ) : (
-                    <Layers3 size={16} />
-                  )}
-                  <span>{t}</span>
-                </button>
-              ))}
+              {["Studio", "Difficulty Lab", "Compare", "Custom Shapes"].map(
+                (t, i) => (
+                  <button
+                    key={t}
+                    className={tab === t ? "active" : ""}
+                    onClick={() => setTab(t)}
+                  >
+                    {i === 0 ? (
+                      <Waves size={16} />
+                    ) : i === 1 ? (
+                      <Activity size={16} />
+                    ) : i === 2 ? (
+                      <Layers3 size={16} />
+                    ) : (
+                      <Plus size={16} />
+                    )}
+                    <span>{t}</span>
+                  </button>
+                ),
+              )}
             </nav>
             <div className="header-actions">
               <button
@@ -849,7 +783,9 @@ export default function App() {
                     <span>·</span> Natural Earth {settings.resolution}
                   </div>
                 </div>
-                <div className="stats-row">
+                <div
+                  className={`stats-row ${settings.mode !== "main" ? "has-components" : ""}`}
+                >
                   <button
                     className="main-stat equation-stat"
                     aria-label="View Fourier equation for the current N"
@@ -920,6 +856,9 @@ export default function App() {
                       normalized mean distance
                     </span>
                   </div>
+                  {settings.mode !== "main" && (
+                    <Components analysis={analysis} tile />
+                  )}
                 </div>
                 <div className="playback">
                   <input
@@ -1228,6 +1167,19 @@ export default function App() {
                     country={selected}
                     current={construction.terms}
                   />
+                  <Suspense
+                    fallback={
+                      <p className="note" role="status">
+                        Loading validation…
+                      </p>
+                    }
+                  >
+                    <StudioValidation
+                      config={config}
+                      terms={terms}
+                      cap={settings.cap}
+                    />
+                  </Suspense>
                 </div>
               </>
             )}
@@ -1248,6 +1200,16 @@ export default function App() {
             clock={clock}
             dark={dark}
           />
+        ) : tab === "Custom Shapes" ? (
+          <Suspense
+            fallback={
+              <p className="note" role="status">
+                Loading shape workspace…
+              </p>
+            }
+          >
+            <CustomShapes appearance={appearance} dark={dark} />
+          </Suspense>
         ) : (
           <CompareView
             countries={countries}

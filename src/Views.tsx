@@ -30,6 +30,7 @@ import TermRanking from "./TermRanking";
 import CompareAccuracy from "./CompareAccuracy";
 import { compareColors } from "./compareColors";
 import { csv, download } from "./exports";
+import Components from "./Components";
 type Row = {
   id: string;
   curve: CurvePoint[];
@@ -232,6 +233,8 @@ export function DifficultyLab({
             return a.country.name.localeCompare(b.country.name);
           if (!a.row) return 1;
           if (!b.row) return -1;
+          if (sort === "time") return a.row.elapsed - b.row.elapsed;
+          if (sort === "time-desc") return b.row.elapsed - a.row.elapsed;
           return sort === "accuracy"
             ? b.row.best - a.row.best
             : b.row.difficulty - a.row.difficulty;
@@ -409,6 +412,7 @@ export function DifficultyLab({
           </b>
         </div>
       </div>
+      {config.mode !== "main" && <Components analysis={displayAnalysis} />}
       {preview.error && !showingLive && (
         <p className="note" role="alert">
           {preview.error}
@@ -587,6 +591,8 @@ export function DifficultyLab({
                 >
                   <option value="difficulty">Difficulty</option>
                   <option value="accuracy">Accuracy</option>
+                  <option value="time">Time: shortest first</option>
+                  <option value="time-desc">Time: longest first</option>
                   <option value="name">Country A–Z</option>
                 </select>
               </label>
@@ -615,6 +621,25 @@ export function DifficultyLab({
                   <th>95% terms</th>
                   <th>99% terms</th>
                   <th>Best tested</th>
+                  <th
+                    aria-sort={
+                      sort === "time"
+                        ? "ascending"
+                        : sort === "time-desc"
+                          ? "descending"
+                          : "none"
+                    }
+                  >
+                    <button
+                      className="table-sort-button"
+                      onClick={() =>
+                        setSort(sort === "time" ? "time-desc" : "time")
+                      }
+                      title="Sort by measured curve calculation time"
+                    >
+                      Time <ArrowDownUp size={11} />
+                    </button>
+                  </th>
                   <th>
                     <span className="components-heading">
                       Components{" "}
@@ -688,6 +713,9 @@ export function DifficultyLab({
                       </td>
                     ))}
                     <td>{row ? `${row.best.toFixed(2)}%` : "—"}</td>
+                    <td title="Measured curve search time on this device; includes scoring and scheduling, excludes data loading.">
+                      {row ? `${(row.elapsed / 1000).toFixed(2)}s` : "—"}
+                    </td>
                     <td>{row ? row.components : "—"}</td>
                     <td>
                       <button
@@ -835,6 +863,7 @@ function CompareCard({
   independent,
   onTerm,
   result,
+  maxTerms,
 }: {
   color: string;
   id: string;
@@ -846,17 +875,18 @@ function CompareCard({
   appearance: Appearance;
   clock: React.RefObject<Clock>;
   dark: boolean;
-  onMetric: (id: string, value: number) => void;
+  onMetric: (id: string, value: number, analysis: Analysis) => void;
   independent: boolean;
   onTerm: (n: number) => void;
   result?: SearchResult;
+  maxTerms: number;
 }) {
   const { analysis, busy, error } = useAnalysis(
     { ...config, country: id },
     terms,
   );
   useEffect(() => {
-    if (analysis && !busy) onMetric(id, analysis.metrics.similarity);
+    if (analysis && !busy) onMetric(id, analysis.metrics.similarity, analysis);
   }, [analysis, busy, id]);
   return (
     <article className="surface compare-card">
@@ -901,12 +931,21 @@ function CompareCard({
           <strong>{terms}</strong>
         </div>
       </div>
+      {config.mode !== "main" && <Components analysis={analysis} />}
+      <span
+        className="compare-timing"
+        title="Fourier reconstruction and metric calculation only, on this device. Cached results retain their original timing."
+      >
+        {analysis?.elapsedMs !== undefined
+          ? `${analysis.elapsedMs.toFixed(2)} ms · reconstruction & scoring`
+          : ""}
+      </span>
       {independent && (
         <Slider
           label={`${id} terms`}
           value={terms}
           min={1}
-          max={500}
+          max={maxTerms}
           onChange={onTerm}
         />
       )}
@@ -957,6 +996,11 @@ export function CompareView({
   const [ids, setIds] = useState(["LKA", "AUS"]),
     [mode, setMode] = useState("terms"),
     [metrics, setMetrics] = useState<Record<string, number>>({}),
+    [measured, setMeasured] = useState<Record<string, Analysis>>({}),
+    [tableSort, setTableSort] = useState<
+      "time" | "similarity" | "error" | "terms" | "components"
+    >("similarity"),
+    [tableReverse, setTableReverse] = useState(false),
     [results, setResults] = useState<Record<string, SearchResult>>({}),
     [ownTerms, setOwnTerms] = useState<Record<string, number>>({}),
     [independent, setIndependent] = useState(false),
@@ -1044,7 +1088,7 @@ export function CompareView({
             className={mode === "terms" ? "active" : ""}
             onClick={() => setMode("terms")}
           >
-            Equal terms
+            By terms
           </button>
           <button
             className={mode === "accuracy" ? "active" : ""}
@@ -1053,10 +1097,17 @@ export function CompareView({
               setIndependent(false);
             }}
           >
-            Equal accuracy
+            By similarity
           </button>
         </div>
-        {mode === "terms" ? (
+        {mode === "terms" && independent ? (
+          <div className="independent-terms-summary">
+            <b>Set N on each country</b>
+            <span>
+              {ids.map((id) => `${id} ${ownTerms[id] ?? terms}`).join(" · ")}
+            </span>
+          </div>
+        ) : mode === "terms" ? (
           <Slider
             label="Shared Fourier terms"
             value={terms}
@@ -1085,14 +1136,29 @@ export function CompareView({
             Find required terms
           </button>
         ) : (
-          <label className="check-label">
-            <input
-              type="checkbox"
-              checked={independent}
-              onChange={(e) => setIndependent(e.target.checked)}
-            />{" "}
-            Independent term counts
-          </label>
+          <div className="term-sharing segmented" aria-label="Term count mode">
+            <button
+              className={!independent ? "active" : ""}
+              aria-pressed={!independent}
+              onClick={() => setIndependent(false)}
+            >
+              Shared N
+            </button>
+            <button
+              className={independent ? "active" : ""}
+              aria-pressed={independent}
+              onClick={() => {
+                setOwnTerms(
+                  Object.fromEntries(
+                    ids.map((id) => [id, ownTerms[id] ?? terms]),
+                  ),
+                );
+                setIndependent(true);
+              }}
+            >
+              Per country
+            </button>
+          </div>
         )}
       </div>
       <div className="compare-playback-bar">
@@ -1158,6 +1224,7 @@ export function CompareView({
             clock={clock}
             dark={dark}
             independent={independent}
+            maxTerms={Math.min(settings.cap, settings.samples)}
             onTerm={(n) => setOwnTerms({ ...ownTerms, [id]: n })}
             onChange={(next) => {
               const all = [...ids];
@@ -1169,9 +1236,10 @@ export function CompareView({
                 ? () => setIds(ids.filter((_, j) => i !== j))
                 : undefined
             }
-            onMetric={(key, v) =>
-              setMetrics((m) => (m[key] === v ? m : { ...m, [key]: v }))
-            }
+            onMetric={(key, v, a) => {
+              setMetrics((m) => (m[key] === v ? m : { ...m, [key]: v }));
+              setMeasured((m) => ({ ...m, [key]: a }));
+            }}
             result={results[id]}
           />
         ))}
@@ -1238,6 +1306,99 @@ export function CompareView({
           {mode === "accuracy"
             ? ` · ${target}% target · search step ${settings.step}`
             : ""}
+        </p>
+        <div className="comparison-table-wrap">
+          <table className="comparison-metrics-table">
+            <thead>
+              <tr>
+                <th>Country</th>
+                {(
+                  [
+                    ["terms", "N"],
+                    ["similarity", "Similarity"],
+                    ["error", "Boundary error"],
+                    ...(config.mode !== "main"
+                      ? [["components", "Components"]]
+                      : []),
+                    ["time", "Calculation time"],
+                  ] as [typeof tableSort, string][]
+                ).map(([key, label]) => (
+                  <th
+                    key={key}
+                    aria-sort={
+                      tableSort === key
+                        ? (key === "similarity") !== tableReverse
+                          ? "descending"
+                          : "ascending"
+                        : "none"
+                    }
+                  >
+                    <button
+                      className="table-sort-button"
+                      onClick={() => {
+                        if (tableSort === key) setTableReverse(!tableReverse);
+                        else {
+                          setTableSort(key);
+                          setTableReverse(false);
+                        }
+                      }}
+                    >
+                      {label}
+                      <ArrowDownUp size={11} />
+                    </button>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {[...ids]
+                .sort((a, b) => {
+                  if (!measured[a] && !measured[b]) return 0;
+                  if (!measured[a]) return 1;
+                  if (!measured[b]) return -1;
+                  const value = (id: string) => {
+                    const a = measured[id];
+                    if (!a) return Infinity;
+                    return tableSort === "time"
+                      ? (a.elapsedMs ?? Infinity)
+                      : tableSort === "terms"
+                        ? a.terms
+                        : tableSort === "components"
+                          ? a.model.components
+                          : tableSort === "error"
+                            ? a.metrics.mean
+                            : -a.metrics.similarity;
+                  };
+                  return (value(a) - value(b)) * (tableReverse ? -1 : 1);
+                })
+                .map((id) => {
+                  const a = measured[id];
+                  return (
+                    <tr key={id}>
+                      <td>
+                        <Flag country={countries.find((c) => c.id === id)} />
+                        {countries.find((c) => c.id === id)?.name || id}
+                      </td>
+                      <td>{a?.terms ?? "—"}</td>
+                      <td>{a ? `${a.metrics.similarity.toFixed(2)}%` : "—"}</td>
+                      <td>{a ? `${a.metrics.mean.toFixed(2)}%` : "—"}</td>
+                      {config.mode !== "main" && (
+                        <td>{a?.model.components ?? "—"}</td>
+                      )}
+                      <td title="Reconstruction and metric scoring on this device. Excludes data loading; cached results keep their original timing.">
+                        {a?.elapsedMs !== undefined
+                          ? `${a.elapsedMs.toFixed(2)} ms`
+                          : "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
+            </tbody>
+          </table>
+        </div>
+        <p className="note">
+          Times measure reconstruction and scoring on this device; cached
+          results keep their original timing.
         </p>
       </div>
     </div>

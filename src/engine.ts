@@ -2,6 +2,8 @@ export type Point = [number, number];
 export type Geometry = {
   type: "Polygon" | "MultiPolygon";
   coordinates: number[][][] | number[][][][];
+  coordinateSystem?: "cartesian" | "screen";
+  names?: string[];
 };
 export type Country = {
   id: string;
@@ -18,6 +20,8 @@ export type Component = {
 };
 export type Contour = {
   points: Point[];
+  source?: Point[];
+  name?: string;
   coefficients: Component[];
   hole: boolean;
   group: number;
@@ -44,6 +48,7 @@ export type Analysis = {
   paths: Point[][];
   metrics: Metrics;
   terms: number;
+  elapsedMs?: number;
 };
 export type CurvePoint = {
   terms: number;
@@ -171,6 +176,10 @@ export function prepare(
   const centerLat =
     largest[0].reduce((s, p) => s + p[1], 0) / largest[0].length;
   const project = (raw: number[][]): Point[] => {
+    if (geometry.coordinateSystem === "screen")
+      return raw.map(([x, y]) => [x, y]);
+    if (geometry.coordinateSystem === "cartesian")
+      return raw.map(([x, y]) => [x, -y]);
     let prev = seed;
     const out: Point[] = [];
     for (const p of raw) {
@@ -229,12 +238,15 @@ export function prepare(
                 Math.log2(Math.max(32, (samples * perimeters[i]) / longest)),
               ),
           );
-    const p = resample(
-      r.points.map(([x, y]) => [(x - cx) * scale, (y - cy) * scale]),
-      n,
-    );
+    const source: Point[] = r.points.map(([x, y]) => [
+      (x - cx) * scale,
+      (y - cy) * scale,
+    ]);
+    const p = resample(source, n);
     return {
       points: p,
+      source,
+      name: geometry.names?.[r.group],
       coefficients: coefficients(p),
       group: r.group,
       hole: r.hole,
@@ -360,8 +372,10 @@ export function measure(model: Model, paths: Point[][]): Metrics {
   };
 }
 export function analyze(model: Model, terms: number): Analysis {
+  const start = performance.now();
   const paths = model.contours.map((c) => reconstruct(c, terms));
-  return { model, paths, metrics: measure(model, paths), terms };
+  const metrics = measure(model, paths);
+  return { model, paths, metrics, terms, elapsedMs: performance.now() - start };
 }
 export async function search(
   model: Model,

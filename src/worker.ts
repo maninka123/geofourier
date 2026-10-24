@@ -1,32 +1,44 @@
 import { prepare, analyze, search, type Model, type Geometry } from "./engine";
+import { validate } from "./validation";
 const models = new Map<string, Model>(),
   results = new Map<string, ReturnType<typeof analyze>>(),
+  active = new Set<number>(),
   cancelled = new Set<number>();
 self.onmessage = async ({ data }) => {
   const { id, action, key } = data;
   if (action === "cancel") {
-    cancelled.add(data.job);
+    if (active.has(data.job)) cancelled.add(data.job);
     return;
   }
+  active.add(id);
   try {
     let model = models.get(key);
     if (!model) {
-      const response = await fetch(
-        `${import.meta.env.BASE_URL}data/${data.resolution}-${data.country}.json`,
-      );
-      if (!response.ok)
-        throw Error(
-          "This country is unavailable at this dataset resolution. Choose 1:50m.",
+      let geometry: Geometry | undefined = data.geometry;
+      if (!geometry) {
+        const response = await fetch(
+          `${import.meta.env.BASE_URL}data/${data.resolution}-${data.country}.json`,
         );
-      model = prepare(
-        (await response.json()) as Geometry,
-        data.samples,
-        data.mode,
-      );
+        if (!response.ok)
+          throw Error(
+            "This country is unavailable at this dataset resolution. Choose 1:50m.",
+          );
+        geometry = (await response.json()) as Geometry;
+      }
+      model = prepare(geometry, data.samples, data.mode);
       models.set(key, model);
       if (models.size > 32) models.delete(models.keys().next().value!);
     }
-    if (action === "search") {
+    if (action === "validate") {
+      const result = await validate(
+        model,
+        data.terms,
+        Math.min(data.cap, data.samples),
+        () => cancelled.has(id),
+      );
+      cancelled.delete(id);
+      self.postMessage({ id, result });
+    } else if (action === "search") {
       let lastPreview = -Infinity;
       const result = await search(
         model!,
@@ -78,5 +90,8 @@ self.onmessage = async ({ data }) => {
       id,
       error: error instanceof Error ? error.message : String(error),
     });
+  } finally {
+    active.delete(id);
+    cancelled.delete(id);
   }
 };

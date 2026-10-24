@@ -199,7 +199,7 @@ export function AppearanceControls({
           ["guides", "Center guides"],
           ["glow", "Soft glow"],
           ["fading", "Trail fading"],
-          ["heatmap", "Error heatmap"],
+          ["heatmap", "Sample displacement colours"],
         ] as const
       ).map(([key, label]) => (
         <Toggle

@@ -6,6 +6,13 @@ import { rankTermsFor99 } from "./rankingData";
 import { compareColors } from "./compareColors";
 import { termAxisPosition, termAxisTicks } from "./chartScale";
 import { PLAYBACK_SPEEDS, nearestPlaybackSpeed } from "./playbackSpeed";
+import { parseCSV, parseGeoJSON, ringsToBoundary } from "./customBoundary";
+import {
+  retainedEnergy,
+  nearestOnBoundary,
+  componentResults,
+  validate,
+} from "./validation";
 import {
   coefficients,
   fft,
@@ -23,14 +30,220 @@ const geometry = (id: string) =>
   JSON.parse(fs.readFileSync(`public/data/50m-${id}.json`, "utf8")) as Geometry;
 
 test("playback speed snaps to slow options and two-times steps through eight", () => {
-  assert.deepEqual(PLAYBACK_SPEEDS.slice(3), [2, 4, 6, 8]);
+  assert.deepEqual(PLAYBACK_SPEEDS.slice(2), [2, 4, 6, 8]);
   for (const speed of PLAYBACK_SPEEDS)
     assert.equal(nearestPlaybackSpeed(speed), speed);
   assert.equal(nearestPlaybackSpeed(3.9), 4);
   assert.equal(nearestPlaybackSpeed(6.1), 6);
   assert.equal(nearestPlaybackSpeed(100), 8);
-  assert.equal(nearestPlaybackSpeed(-10), 0.25);
-  assert.equal(nearestPlaybackSpeed(NaN), 1);
+  assert.equal(nearestPlaybackSpeed(-10), 0.5);
+  assert.equal(nearestPlaybackSpeed(NaN), 2);
+});
+
+test("custom CSV preserves disconnected outlines, reports open paths and validates coordinates", () => {
+  const input = parseCSV(
+    "x,y\n0,0\n1000,0\n1000,500\n0,500\n0,0\n\n2000,0\n2100,0\n2100,100",
+  );
+  assert.equal(input.openPaths, 1);
+  assert.equal(input.geometry.type, "MultiPolygon");
+  const model = prepare(input.geometry, 256, "full");
+  assert.equal(model.components, 2);
+  assert.ok(
+    model.contours.every((c) =>
+      c.points.every((p) => p.every(Number.isFinite)),
+    ),
+  );
+  assert.throws(() => parseCSV("x,y\n0,0\nNaN,2\n3,4"), /numeric/);
+  assert.throws(() => parseCSV("0,0\n1,1\n2,2"), /zero area/);
+});
+test("custom GeoJSON retains feature names and holes without accepting out-of-range geography", () => {
+  const feature = {
+    type: "Feature",
+    properties: { name: "Outer profile" },
+    geometry: {
+      type: "Polygon",
+      coordinates: [
+        [
+          [0, 0],
+          [3, 0],
+          [3, 3],
+          [0, 3],
+          [0, 0],
+        ],
+        [
+          [1, 1],
+          [1, 2],
+          [2, 2],
+          [2, 1],
+          [1, 1],
+        ],
+      ],
+    },
+  };
+  const input = parseGeoJSON(JSON.stringify(feature));
+  const model = prepare(input.geometry, 256, "full");
+  assert.equal(input.openPaths, 0);
+  assert.equal(model.components, 1);
+  assert.equal(model.contours.filter((c) => c.hole).length, 1);
+  assert.equal(model.contours[0].name, "Outer profile");
+  assert.throws(() => parseGeoJSON("{"), /valid JSON/);
+  assert.throws(
+    () =>
+      parseGeoJSON(
+        JSON.stringify({
+          type: "Polygon",
+          coordinates: [
+            [
+              [181, 0],
+              [182, 1],
+              [183, 0],
+              [181, 0],
+            ],
+          ],
+        }),
+      ),
+    /longitude/,
+  );
+});
+test("drawn nested contours become holes and disconnected strokes remain independent", () => {
+  const input = ringsToBoundary(
+    [
+      {
+        closed: true,
+        points: [
+          [0, 0],
+          [10, 0],
+          [10, 10],
+          [0, 10],
+        ],
+      },
+      {
+        closed: true,
+        points: [
+          [2, 2],
+          [4, 2],
+          [4, 4],
+          [2, 4],
+        ],
+      },
+      {
+        closed: true,
+        points: [
+          [20, 0],
+          [22, 0],
+          [22, 2],
+          [20, 2],
+        ],
+      },
+    ],
+    "Drawn",
+  );
+  const m = prepare(input.geometry, 256, "full");
+  assert.equal(m.components, 2);
+  assert.equal(m.contours.filter((c) => c.hole).length, 1);
+});
+test("boundary distances use edges, including the closing segment", () => {
+  const hit = nearestOnBoundary(
+    [0.5, 0.5],
+    [
+      [0, 0],
+      [2, 0],
+      [2, 2],
+      [0, 2],
+    ],
+  );
+  assert.equal(hit.distance, 0.5);
+  assert.ok(hit.point[0] === 0.5 || hit.point[1] === 0.5);
+  assert.equal(
+    nearestOnBoundary(
+      [0, 1],
+      [
+        [0, 0],
+        [2, 0],
+        [2, 2],
+        [0, 2],
+      ],
+    ).distance,
+    0,
+  );
+});
+test("SVG and drawn screen coordinates keep their orientation while x/y CSV uses an upward y axis", () => {
+  const shape = ringsToBoundary(
+    [
+      {
+        closed: true,
+        points: [
+          [0, 0],
+          [10, 0],
+          [10, 3],
+          [3, 3],
+          [3, 10],
+          [0, 10],
+        ],
+      },
+    ],
+    "Profile",
+  );
+  assert.equal(shape.geometry.coordinateSystem, "screen");
+  assert.equal(
+    parseGeoJSON(JSON.stringify(shape.geometry)).geometry.coordinateSystem,
+    "screen",
+  );
+  assert.ok(prepare(shape.geometry, 256, "full").contours[0].source![0][1] < 0);
+  assert.ok(
+    prepare(parseCSV("0,0\n10,0\n10,3\n3,3\n3,10\n0,10").geometry, 256, "full")
+      .contours[0].source![0][1] > 0,
+  );
+  const geographic = parseCSV("longitude,latitude\n0,0\n2,0\n2,1\n0,0");
+  assert.equal(geographic.geometry.coordinateSystem, undefined);
+});
+test("custom input rejects excessive coordinates and unsafe magnitudes", () => {
+  assert.throws(() => parseCSV("0,0\n1e300,0\n0,1"), /magnitude/);
+  assert.throws(
+    () =>
+      ringsToBoundary(
+        [
+          {
+            closed: true,
+            points: Array.from(
+              { length: 50001 },
+              (_, i) =>
+                [
+                  Math.cos((i / 50001) * Math.PI * 2),
+                  Math.sin((i / 50001) * Math.PI * 2),
+                ] as Point,
+            ),
+          },
+        ],
+        "Large",
+      ),
+    /50,000/,
+  );
+});
+test("retained energy excludes translation and converges to 100 percent", () => {
+  const m = prepare(geometry("ZAF"), 256, "full");
+  assert.equal(retainedEnergy(m, 256), 100);
+  assert.ok(retainedEnergy(m, 10) < retainedEnergy(m, 50));
+  assert.ok(m.contours.every((c) => c.source && c.source.length >= 3));
+  const a = analyze(m, 40),
+    rows = componentResults(a);
+  assert.equal(rows.length, 2);
+  assert.ok(rows[0].area >= rows[1].area);
+  assert.ok(rows.every((r) => Number.isFinite(r.metrics.mean)));
+});
+test("validation distinguishes the sampled and original dataset contours and measures sampling sensitivity", async () => {
+  const m = prepare(geometry("LKA"), 32, "main"),
+    r = await validate(m, 32, 32);
+  assert.ok(r.sampled.similarity > 99.999);
+  assert.ok(r.source.mean > r.sampled.mean);
+  assert.equal(r.energy, 100);
+  assert.deepEqual(
+    r.sensitivity.map((s) => s.samples),
+    [256, 512, 1024, 2048],
+  );
+  assert.ok(r.curve.some((p) => p.n === 32));
+  assert.ok(r.errors[0].max.distance > 0);
+  await assert.rejects(() => validate(m, 20, 32, () => true), /cancelled/);
 });
 
 test("logarithmic term axis expands early detail without changing N values", () => {

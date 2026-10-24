@@ -6,7 +6,6 @@ export default function Playback({
   speed,
   onSpeed,
   duration,
-  onDuration,
   loops,
   onLoops,
 }: {
@@ -115,38 +114,11 @@ export default function Playback({
                   </button>
                 ))}
               </div>
-              <label className="speed-cycle-reference">
-                At 1×
-                <select
-                  aria-label="Cycle time at normal speed"
-                  value={duration}
-                  onChange={(e) => onDuration(Number(e.target.value))}
-                >
-                  {[5, 10, 20, 30, 60, 120].map((seconds) => (
-                    <option value={seconds} key={seconds}>
-                      {seconds}s / outline
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <p className="speed-cycle-reference" aria-live="polite">
+                {Number((duration / speed).toFixed(2))} seconds per outline
+              </p>
             </div>
             <div className="inline-selects">
-              <label>
-                Cycle time
-                <select
-                  aria-label="Cycle duration"
-                  value={speedIndex}
-                  onChange={(e) =>
-                    onSpeed(PLAYBACK_SPEEDS[Number(e.target.value)])
-                  }
-                >
-                  {PLAYBACK_SPEEDS.map((value, index) => (
-                    <option key={value} value={index}>
-                      {Number((duration / value).toFixed(2))} seconds
-                    </option>
-                  ))}
-                </select>
-              </label>
               <label>
                 Final N repeats
                 <select
