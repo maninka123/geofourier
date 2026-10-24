@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import { Info } from "lucide-react";
 import { termAxisPosition, termAxisTicks } from "./chartScale";
 export default function ScienceChart({
   points,
@@ -7,6 +8,7 @@ export default function ScienceChart({
   color = "var(--accent)",
   unit = "%",
   current,
+  explanation,
 }: {
   points: { n: number; [key: string]: number }[];
   field: string;
@@ -14,8 +16,11 @@ export default function ScienceChart({
   color?: string;
   unit?: string;
   current?: number;
+  explanation?: string;
 }) {
   const [active, setActive] = useState<number>();
+  const [explaining, setExplaining] = useState(false);
+  const explanationId = useId();
   const [w, setWidth] = useState(620),
     root = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -43,11 +48,30 @@ export default function ScienceChart({
   return (
     <div className="science-chart" ref={root}>
       <div className="science-chart-heading">
-        <b>{title}</b>
+        <div className="science-chart-title">
+          <b>{title}</b>
+          {explanation && (
+            <button
+              className="chart-info-button"
+              aria-label={`Explain ${title}`}
+              aria-expanded={explaining}
+              aria-controls={explanationId}
+              onClick={() => setExplaining((value) => !value)}
+              title="What does this mean?"
+            >
+              <Info size={14} />
+            </button>
+          )}
+        </div>
         <output>
           {p ? `${p[field].toFixed(2)}${unit} · N ${p.n}` : "Preparing…"}
         </output>
       </div>
+      {explanation && explaining && (
+        <p id={explanationId} className="science-chart-explanation">
+          {explanation}
+        </p>
+      )}
       <svg
         viewBox={`0 0 ${w} ${h}`}
         role="img"

@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
-    "test": "tsx --test src/engine.test.ts",
+    "test": "tsx --test src/engine.test.ts scripts/land-area-names.test.mjs",
+    "data:names": "node scripts/name-land-areas.mjs",
     "data": "node scripts/prepare-data.mjs",
     "preview": "vite preview --host 0.0.0.0"
   },

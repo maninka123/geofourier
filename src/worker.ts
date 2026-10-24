@@ -4,6 +4,15 @@ const models = new Map<string, Model>(),
   results = new Map<string, ReturnType<typeof analyze>>(),
   active = new Set<number>(),
   cancelled = new Set<number>();
+let landNames: Promise<Record<string, string[]>> | undefined;
+function getLandNames() {
+  return (landNames ||= fetch(
+    `${import.meta.env.BASE_URL}data/land-area-names.json`,
+  )
+    .then((r) => (r.ok ? r.json() : undefined))
+    .then((data) => data?.names || {})
+    .catch(() => ({})));
+}
 self.onmessage = async ({ data }) => {
   const { id, action, key } = data;
   if (action === "cancel") {
@@ -16,14 +25,20 @@ self.onmessage = async ({ data }) => {
     if (!model) {
       let geometry: Geometry | undefined = data.geometry;
       if (!geometry) {
-        const response = await fetch(
-          `${import.meta.env.BASE_URL}data/${data.resolution}-${data.country}.json`,
-        );
+        const [response, names] = await Promise.all([
+          fetch(
+            `${import.meta.env.BASE_URL}data/${data.resolution}-${data.country}.json`,
+          ),
+          getLandNames(),
+        ]);
         if (!response.ok)
           throw Error(
             "This country is unavailable at this dataset resolution. Choose 1:50m.",
           );
         geometry = (await response.json()) as Geometry;
+        geometry.names = names[`${data.resolution}-${data.country}`];
+        if (geometry.names)
+          geometry.namesSource = "Natural Earth physical labels";
       }
       model = prepare(geometry, data.samples, data.mode);
       models.set(key, model);

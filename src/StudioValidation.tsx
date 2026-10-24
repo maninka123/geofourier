@@ -1,7 +1,8 @@
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { LoaderCircle, ScanLine } from "lucide-react";
 import { request, type Config } from "./client";
 import type { ValidationReport } from "./validation";
+import { nearestOnBoundary } from "./validation";
 import ScienceChart from "./ScienceChart";
 import type { Point } from "./engine";
 function StudioValidation({
@@ -49,6 +50,72 @@ function StudioValidation({
     };
   }, [key]);
   const report = data?.key === key ? data.report : undefined;
+  const closeups = useMemo(() => {
+    if (!report) return [];
+    const largest = report.errors.reduce((a, b) =>
+      a.max.distance > b.max.distance ? a : b,
+    ).max;
+    const span = Math.max(
+      0.12,
+      Math.min(
+        0.45,
+        Math.hypot(
+          largest.from[0] - largest.to[0],
+          largest.from[1] - largest.to[1],
+        ) * 10,
+      ),
+    );
+    const candidates = report.errors
+      .flatMap((e) => [
+        {
+          point: [
+            (e.max.from[0] + e.max.to[0]) / 2,
+            (e.max.from[1] + e.max.to[1]) / 2,
+          ] as Point,
+          distance: e.max.distance,
+          from: e.max.from,
+          to: e.max.to,
+          reference: e.reference,
+        },
+        ...e.path.map((point, j) => ({
+          point,
+          distance: e.distances[j],
+          from: point,
+          to: undefined as Point | undefined,
+          reference: e.reference,
+        })),
+      ])
+      .sort((a, b) => b.distance - a.distance);
+    const selected: {
+      point: Point;
+      distance: number;
+      span: number;
+      from: Point;
+      to: Point;
+    }[] = [];
+    for (const candidate of candidates) {
+      if (
+        selected.every(
+          (p) =>
+            Math.hypot(
+              p.point[0] - candidate.point[0],
+              p.point[1] - candidate.point[1],
+            ) >
+            span * 1.25,
+        )
+      ) {
+        selected.push({
+          ...candidate,
+          span,
+          to:
+            candidate.to ||
+            nearestOnBoundary(candidate.from, candidate.reference).point,
+        });
+        if (selected.length === 2) break;
+      }
+    }
+    return selected;
+  }, [report]);
   const max = Math.max(
     0.001,
     ...(report?.errors.map((e) => e.max.distance) || []),
@@ -177,6 +244,29 @@ function StudioValidation({
                     )}
                   </g>
                 ))}
+                {closeups.map((p, i) => (
+                  <g key={`focus-${i}`} className="error-map-focus">
+                    <rect
+                      x={220 + (p.point[0] - p.span / 2) * 148}
+                      y={178 + (p.point[1] - p.span / 2) * 148}
+                      width={p.span * 148}
+                      height={p.span * 148}
+                      rx="2"
+                    />
+                    <circle
+                      cx={220 + (p.point[0] - p.span / 2) * 148}
+                      cy={178 + (p.point[1] - p.span / 2) * 148}
+                      r="8"
+                    />
+                    <text
+                      x={220 + (p.point[0] - p.span / 2) * 148}
+                      y={181 + (p.point[1] - p.span / 2) * 148}
+                      textAnchor="middle"
+                    >
+                      {i + 1}
+                    </text>
+                  </g>
+                ))}
               </svg>
               <div className="error-map-key">
                 <span>Lower error</span>
@@ -189,6 +279,59 @@ function StudioValidation({
                 diagonal. Markers show the largest sampled deviations.
               </p>
             </div>
+            <aside
+              className="error-closeups"
+              aria-label="Magnified boundary details"
+            >
+              {closeups.map((p, i) => (
+                <figure key={i}>
+                  <figcaption>
+                    <b>{i + 1}</b>{" "}
+                    {i === 0 ? "Largest deviation" : "Another detail"}
+                  </figcaption>
+                  <svg
+                    viewBox={`${220 + (p.point[0] - p.span / 2) * 148} ${178 + (p.point[1] - p.span / 2) * 148} ${p.span * 148} ${p.span * 148}`}
+                    role="img"
+                    aria-label={`Close-up ${i + 1}: original and reconstructed boundary`}
+                  >
+                    {report.errors.map((e, j) => (
+                      <g key={j}>
+                        <path
+                          d={path(e.reference)}
+                          className="closeup-original"
+                        />
+                        <path
+                          d={path(e.path)}
+                          className="closeup-reconstruction"
+                        />
+                      </g>
+                    ))}
+                    <line
+                      x1={220 + p.from[0] * 148}
+                      y1={178 + p.from[1] * 148}
+                      x2={220 + p.to[0] * 148}
+                      y2={178 + p.to[1] * 148}
+                      className="closeup-deviation"
+                    />
+                    {[p.from, p.to].map((point, j) => (
+                      <circle
+                        key={j}
+                        cx={220 + point[0] * 148}
+                        cy={178 + point[1] * 148}
+                        r={((p.span * 148) / 112) * 2}
+                        className="closeup-deviation"
+                      />
+                    ))}
+                  </svg>
+                  <p>{p.distance.toFixed(2)}% deviation</p>
+                </figure>
+              ))}
+              <div className="closeup-key">
+                <span>Original</span>
+                <span>Reconstructed</span>
+                <span>Gap</span>
+              </div>
+            </aside>
             <div className="validation-summary">
               <div className="validation-metric">
                 <span>Sampled contour similarity</span>
@@ -205,11 +348,30 @@ function StudioValidation({
                 </strong>
               </div>
               <div className="validation-metric">
-                <span>Spectral energy retained</span>
+                <span>Shape detail captured</span>
                 <strong>
                   {report.energy.toFixed(2)}
                   <small>%</small>
                 </strong>
+                <div
+                  className="detail-captured-meter"
+                  role="meter"
+                  aria-label="Shape detail captured: retained spectral energy"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={report.energy}
+                >
+                  <i style={{ width: `${report.energy}%` }} />
+                </div>
+                <p className="detail-captured-note">
+                  Contour variation kept by these terms. Use similarity to check
+                  the boundary match.
+                </p>
+                <details className="detail-captured-definition">
+                  <summary>How it’s measured</summary>
+                  Spectral energy: the share of squared Fourier coefficients
+                  retained, excluding the position term.
+                </details>
               </div>
               <div className="validation-metric">
                 <span>Mean dataset boundary error</span>
@@ -235,7 +397,8 @@ function StudioValidation({
             <ScienceChart
               points={report.curve}
               field="energy"
-              title="Spectral energy retained"
+              title="Shape detail captured as N grows"
+              explanation="How much of the sampled shape’s variation these terms retain. Higher means more is captured; boundary accuracy is shown by similarity."
               current={terms}
               color="#329779"
             />
@@ -265,7 +428,7 @@ function StudioValidation({
                   <th>Sampled similarity</th>
                   <th>Sampled error</th>
                   <th>Dataset error</th>
-                  <th>Energy</th>
+                  <th>Detail captured</th>
                 </tr>
               </thead>
               <tbody>

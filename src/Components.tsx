@@ -126,7 +126,9 @@ function Components({
                           <small>
                             {i === 0
                               ? "Largest land area"
-                              : `Component ${i + 1}`}
+                              : r.name
+                                ? "Separate land area"
+                                : "Name unavailable"}
                             {r.holes
                               ? ` · ${r.holes} interior ${r.holes === 1 ? "hole" : "holes"}`
                               : ""}
@@ -143,9 +145,22 @@ function Components({
               </tbody>
             </table>
           </div>
-          {!rows.some((r) => r.name) && (
+          {rows.some((r) => !r.name) && (
             <p className="note">
-              Individual island names are not included in this dataset.
+              Names appear where available; other areas keep neutral labels.
+            </p>
+          )}
+          {detail.model.namesSource && (
+            <p className="note">
+              Island names:{" "}
+              <a
+                href="https://www.naturalearthdata.com/downloads/10m-physical-vectors/10m-physical-labels/"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Natural Earth physical labels
+              </a>
+              .
             </p>
           )}
         </Modal>

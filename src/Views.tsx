@@ -610,7 +610,15 @@ export function DifficultyLab({
             role="region"
             aria-label="Country results; scroll to explore"
           >
-            <table>
+            <table className={config.mode !== "main" ? "has-components" : ""}>
+              <colgroup>
+                <col className="country-column" />
+                <col span={6} />
+                {config.mode !== "main" && (
+                  <col className="components-column" />
+                )}
+                <col className="status-column" />
+              </colgroup>
               <thead>
                 <tr>
                   <th>Country</th>
@@ -640,23 +648,25 @@ export function DifficultyLab({
                       Time <ArrowDownUp size={11} />
                     </button>
                   </th>
-                  <th>
-                    <span className="components-heading">
-                      Components{" "}
-                      <span
-                        className="help"
-                        tabIndex={0}
-                        role="img"
-                        aria-label="Separate land areas in the map dataset, such as mainland and islands. Counts all land areas even when only the main outline is drawn. Not Fourier terms."
-                        title="Separate land areas in the dataset: mainland and islands. Includes all areas even in Main outline mode. This is not the number of Fourier terms."
-                      >
-                        <Info size={12} />
+                  {config.mode !== "main" && (
+                    <th>
+                      <span className="components-heading">
+                        Components{" "}
+                        <span
+                          className="help"
+                          tabIndex={0}
+                          role="img"
+                          aria-label="Separate land areas, including mainland and islands. Interior holes are not additional land areas. Not Fourier terms."
+                          title="Separate land areas, including mainland and islands. Interior holes are not additional land areas. Not Fourier terms."
+                        >
+                          <Info size={12} />
+                        </span>
                       </span>
-                    </span>
-                    <small className="components-caption">
-                      Separate land areas
-                    </small>
-                  </th>
+                      <small className="components-caption">
+                        Separate land areas
+                      </small>
+                    </th>
+                  )}
                   <th aria-label="Calculation status" />
                 </tr>
               </thead>
@@ -716,7 +726,9 @@ export function DifficultyLab({
                     <td title="Measured curve search time on this device; includes scoring and scheduling, excludes data loading.">
                       {row ? `${(row.elapsed / 1000).toFixed(2)}s` : "—"}
                     </td>
-                    <td>{row ? row.components : "—"}</td>
+                    {config.mode !== "main" && (
+                      <td>{row ? row.components : "—"}</td>
+                    )}
                     <td>
                       <button
                         className={`country-calculation-status ${row ? "is-complete" : "is-pending"}`}

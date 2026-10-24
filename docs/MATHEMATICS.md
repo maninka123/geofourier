@@ -62,7 +62,9 @@ The heatmap measures reconstructed vertices against the closest original boundar
 
 The convergence plots show sampled mean boundary error and retained nonconstant Fourier energy. Translation coefficients are excluded from energy. The small-gains indicator reports average error reduction per ten terms over the last three plotted levels through the selected N; fluctuations can occur. Sampling sensitivity repeats the same N at 256, 512, 1,024 and 2,048 longest-contour samples against the same dataset reference. Each contour can use only as many terms as it has coefficients.
 
-The Components popup lists exterior land areas and associates their interior holes with them. Component similarity is scored in a local frame so small islands remain visible to the raster calculation; mean and maximum distances are converted back to percentages of the whole-country diagonal. Component names are used only when supplied by the input. Natural Earth files bundled here do not contain individual island names.
+The Components popup lists exterior land areas and associates their interior holes with them. Component similarity is scored in a local frame so small islands remain visible to the raster calculation; mean and maximum distances are converted back to percentages of the whole-country diagonal. Source-provided names are preserved for custom shapes. Country land areas use Natural Earth's 1:10m physical island labels where an 18×18 spatial check finds at least 90% coverage in both directions, with compatible bounding-box areas. This conservative label join does not change the reconstruction geometry; unmatched or partial islands retain neutral labels. `npm run data:names` rebuilds the 234 bundled labels (across both resolutions); the source URL and SHA-256 are recorded in `land-area-names.json`.
+
+Numbered boxes locate two separated high-error regions on the map. Adjacent close-ups use the same original and reconstructed vertices, clipped to those boxes; they do not add geographic detail. The largest-deviation close-up also accounts for the reverse original-to-reconstruction check.
 
 ## Custom boundaries
 

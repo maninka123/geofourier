@@ -4,6 +4,7 @@ export type Geometry = {
   coordinates: number[][][] | number[][][][];
   coordinateSystem?: "cartesian" | "screen";
   names?: string[];
+  namesSource?: string;
 };
 export type Country = {
   id: string;
@@ -28,6 +29,7 @@ export type Contour = {
   perimeter: number;
 };
 export type Model = {
+  namesSource?: string;
   contours: Contour[];
   components: number;
   excluded: number;
@@ -255,6 +257,7 @@ export function prepare(
   });
   return {
     contours,
+    namesSource: geometry.namesSource,
     components: exterior.length,
     excluded: all.flat().length - rings.length,
     samples,
