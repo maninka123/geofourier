@@ -7793,6 +7793,14 @@ footer svg {
 }
 
 /* Let the two Studio explanations use their own natural height. */
+.studio-grid .controls-panel {
+  height: auto;
+  min-height: 0;
+  align-self: start;
+}
+.studio-grid .controls-content {
+  flex: 0 1 auto;
+}
 .studio-bottom .spectrum-card {
   padding: 20px 24px;
 }
