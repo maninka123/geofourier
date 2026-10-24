@@ -15,7 +15,7 @@
 - **Difficulty Lab:** watch intermediate reconstructions beside the chart, then explore all measured countries in a full-width scrolling flag chart. Select table countries in a fixed side preview and open them in Studio. [Country preview](docs/screenshots/country-preview.jpg).
 - **Visual settings:** compact controls with matching coastline resolution previews, Japan’s islands, and South Africa’s interior hole. [Preview](docs/screenshots/settings-previews.jpg).
 - **Playback:** drag between marked speeds up to 8×; cycle time stays linked in both directions. [Preview](docs/screenshots/playback.jpg).
-- **Studio accuracy:** a wider curve updates automatically for the selected country and computation settings, with no calculate button. [Preview](docs/screenshots/studio-accuracy.jpg).
+- **Studio accuracy:** a full-width curve below a shallow spectrum panel updates automatically for the selected country and computation settings, with no calculate button. [Preview](docs/screenshots/studio-accuracy.jpg).
 - **Compare:** two to four countries with synchronized playback and distinct flag-derived colours. Accuracy curves update automatically; logarithmic N axes and every N from 1–25 in Studio and Compare reveal early detail. [Curve preview](docs/screenshots/compare-curves.jpg).
 - **Export:** PNG, SVG, WebM, settings, coefficients, and measured CSV data. Shareable URLs and local presets included.
 
