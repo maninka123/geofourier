@@ -19,6 +19,5 @@ export function rankTermsFor99<T extends TermResult>(
       (a, b) =>
         ((a.terms ?? a.row.cap + 1) - (b.terms ?? b.row.cap + 1)) *
           (moreFirst ? -1 : 1) || a.row.id.localeCompare(b.row.id),
-    )
-    .slice(0, 20);
+    );
 }

@@ -54,11 +54,14 @@ import Controls, {
 } from "./Controls";
 import StudioAccuracy from "./StudioAccuracy";
 import { DifficultyLab, CompareView } from "./Views";
+import GeometryPreview from "./GeometryPreview";
+import ResolutionPreview from "./ResolutionPreview";
 import { runSearch, useAnalysis, type Config, type Progress } from "./client";
 import type { Analysis, Country, CurvePoint, SearchResult } from "./engine";
 import { csv, download, exportPng, exportSvg, exportWebm } from "./exports";
 import { SimilarityExplainer, LearningExplainer } from "./Explainers";
 import Playback from "./Playback";
+import { nearestPlaybackSpeed } from "./playbackSpeed";
 import Equation from "./Equation";
 import { constructionAt, type BuildMode } from "./construction";
 type Saved = {
@@ -90,7 +93,7 @@ function readState(): Partial<Saved> {
       country: /^[A-Z0-9]{3}$/.test(s.country) ? s.country : "LKA",
       terms: Math.max(1, Math.min(1000, Number(s.terms) || 150)),
       target: Math.max(70, Math.min(99.9, Number(s.target) || 98)),
-      speed: Math.max(0.1, Math.min(4, Number(s.speed) || 1)),
+      speed: nearestPlaybackSpeed(Number(s.speed) || 1),
       duration: [5, 10, 20, 30, 60, 120].includes(s.duration) ? s.duration : 20,
       loops: [1, 3, 5, 10].includes(s.loops) ? s.loops : 0,
       settings: {
@@ -516,7 +519,7 @@ export default function App() {
     setTarget(s.target);
     setSettings(s.settings);
     setAppearance(s.appearance);
-    setSpeed(s.speed);
+    setSpeed(nearestPlaybackSpeed(s.speed));
     setDuration(s.duration);
     setLoops(s.loops || Infinity);
     seek(0);
@@ -963,7 +966,9 @@ export default function App() {
                           seek(buildMode === "final" ? duration : 0);
                         }}
                       />
-                      <span className="cycle-caption">{duration}s / cycle</span>
+                      <span className="cycle-caption">
+                        {Number((duration / speed).toFixed(2))}s / cycle
+                      </span>
                     </div>
                     <div className="transport">
                       <button
@@ -1222,7 +1227,6 @@ export default function App() {
                     settings={settings}
                     country={selected}
                     current={construction.terms}
-                    searchCurve={curve}
                   />
                 </div>
               </>
@@ -1235,6 +1239,11 @@ export default function App() {
             settings={settings}
             terms={terms}
             onTerms={setTerms}
+            onOpenStudio={(id) => {
+              changeCountry(id);
+              setTab("Studio");
+              window.scrollTo({ top: 0, behavior: "instant" });
+            }}
             appearance={appearance}
             clock={clock}
             dark={dark}
@@ -1295,7 +1304,10 @@ export default function App() {
             }
             onClose={() => setModal("")}
             wide={
-              modal === "learn" || modal === "method" || modal === "equation"
+              modal === "learn" ||
+              modal === "method" ||
+              modal === "equation" ||
+              modal === "settings"
             }
           >
             {modal === "appearance" && (
@@ -1325,115 +1337,135 @@ export default function App() {
                 <p className="modal-intro">
                   Fine-tune the geometry and computation behind your drawing.
                 </p>
-                <label className="select-label">
-                  Geographic detail
-                  <select
-                    value={settings.resolution}
-                    onChange={(e) =>
-                      setSettings({ ...settings, resolution: e.target.value })
-                    }
-                  >
-                    <option value="50m">
-                      Natural Earth 1:50m · 242 countries / territories
-                    </option>
-                    <option value="110m">
-                      Natural Earth 1:110m · 177 countries / territories
-                    </option>
-                  </select>
-                </label>
-                <label className="select-label">
-                  Contour sampling
-                  <select
-                    value={settings.samples}
-                    onChange={(e) =>
-                      setSettings({
-                        ...settings,
-                        samples: Number(e.target.value),
-                      })
-                    }
-                  >
-                    {[256, 512, 1024, 2048].map((n) => (
-                      <option value={n} key={n}>
-                        {n} samples · uniform arc length
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="select-label">
-                  Geometry mode
-                  <select
-                    value={settings.mode}
-                    onChange={(e) =>
-                      setSettings({ ...settings, mode: e.target.value })
-                    }
-                  >
-                    <option value="main">
-                      Main outline · largest exterior ring
-                    </option>
-                    <option value="exterior">
-                      All exterior components · independent paths
-                    </option>
-                    <option value="full">
-                      Full geometry · exteriors and interior holes
-                    </option>
-                  </select>
-                </label>
-                <p className="note">
-                  Each ring draws separately. Smaller rings use fewer
-                  power-of-two samples in proportion to perimeter. No lines
-                  connect separate islands. {analysis?.model.excluded || 0}{" "}
-                  rings excluded in the current mode.
-                </p>
-                <label className="select-label">
-                  Maximum Fourier terms
-                  <select
-                    value={settings.cap}
-                    onChange={(e) =>
-                      setSettings({ ...settings, cap: Number(e.target.value) })
-                    }
-                  >
-                    {[100, 250, 500, 1000].map((n) => (
-                      <option key={n} value={n}>
-                        {n} terms per contour
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <div className="settings-divider" />
-                <div className="card-heading">
-                  <h3>Saved presets</h3>
-                  <button className="text-button" onClick={savePreset}>
-                    <Bookmark size={14} /> Save current
-                  </button>
-                </div>
-                {presets.length ? (
-                  presets.map((p, i) => (
-                    <div className="preset-row" key={i}>
-                      <button onClick={() => loadPreset(p.state)}>
-                        {p.name}
-                        <ArrowRight size={14} />
-                      </button>
-                      <button
-                        className="icon-button"
-                        aria-label={`Delete ${p.name} preset`}
-                        onClick={() => {
-                          const next = presets.filter((_, j) => j !== i);
-                          setPresets(next);
-                          localStorage.setItem(
-                            "forma-presets",
-                            JSON.stringify(next),
-                          );
-                        }}
+                <div className="settings-configuration">
+                  <div className="settings-fields">
+                    <label className="select-label">
+                      Geographic detail
+                      <select
+                        value={settings.resolution}
+                        onChange={(e) =>
+                          setSettings({
+                            ...settings,
+                            resolution: e.target.value,
+                          })
+                        }
                       >
-                        <X size={14} />
+                        <option value="50m">
+                          Natural Earth 1:50m · 242 countries / territories
+                        </option>
+                        <option value="110m">
+                          Natural Earth 1:110m · 177 countries / territories
+                        </option>
+                      </select>
+                    </label>
+                    <label className="select-label">
+                      Contour sampling
+                      <select
+                        value={settings.samples}
+                        onChange={(e) =>
+                          setSettings({
+                            ...settings,
+                            samples: Number(e.target.value),
+                          })
+                        }
+                      >
+                        {[256, 512, 1024, 2048].map((n) => (
+                          <option value={n} key={n}>
+                            {n} samples · uniform arc length
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="select-label">
+                      Geometry mode
+                      <select
+                        value={settings.mode}
+                        onChange={(e) =>
+                          setSettings({ ...settings, mode: e.target.value })
+                        }
+                      >
+                        <option value="main">
+                          Main outline · largest exterior ring
+                        </option>
+                        <option value="exterior">
+                          All exterior components · independent paths
+                        </option>
+                        <option value="full">
+                          Full geometry · exteriors and interior holes
+                        </option>
+                      </select>
+                    </label>
+                    <p className="note">
+                      Each land area draws separately. Islands stay separate;
+                      holes preserve interior boundaries.
+                    </p>
+                    <label className="select-label">
+                      Maximum Fourier terms
+                      <select
+                        value={settings.cap}
+                        onChange={(e) =>
+                          setSettings({
+                            ...settings,
+                            cap: Number(e.target.value),
+                          })
+                        }
+                      >
+                        {[100, 250, 500, 1000].map((n) => (
+                          <option key={n} value={n}>
+                            {n} terms per contour
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="settings-divider" />
+                    <div className="card-heading">
+                      <h3>Saved presets</h3>
+                      <button className="text-button" onClick={savePreset}>
+                        <Bookmark size={14} /> Save current
                       </button>
                     </div>
-                  ))
-                ) : (
-                  <p className="note">
-                    Save a favorite country and its settings here.
-                  </p>
-                )}
+                    {presets.length ? (
+                      presets.map((p, i) => (
+                        <div className="preset-row" key={i}>
+                          <button onClick={() => loadPreset(p.state)}>
+                            {p.name}
+                            <ArrowRight size={14} />
+                          </button>
+                          <button
+                            className="icon-button"
+                            aria-label={`Delete ${p.name} preset`}
+                            onClick={() => {
+                              const next = presets.filter((_, j) => j !== i);
+                              setPresets(next);
+                              localStorage.setItem(
+                                "forma-presets",
+                                JSON.stringify(next),
+                              );
+                            }}
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="note">
+                        Save a favorite country and its settings here.
+                      </p>
+                    )}
+                  </div>
+                  <div className="settings-previews">
+                    <ResolutionPreview
+                      resolution={settings.resolution}
+                      onChange={(resolution) =>
+                        setSettings({ ...settings, resolution })
+                      }
+                    />
+                    <GeometryPreview
+                      mode={settings.mode}
+                      resolution={settings.resolution}
+                    />
+                  </div>
+                </div>
                 <button
                   className="button secondary full-width"
                   onClick={() => {

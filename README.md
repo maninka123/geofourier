@@ -12,7 +12,10 @@
 
 - **Studio:** choose N or target similarity, watch eight construction levels by default, and explore a compact measured accuracy curve. Each level completes a loop; the final N keeps looping.
 - **Equation explorer:** click the N statistic for the actual Fourier equation, animated x(t)/y(t) graphs, and coefficients displayed to two decimal places. [Preview](docs/screenshots/equation.jpg).
-- **Difficulty Lab:** calculate remaining countries, watch real intermediate reconstructions, and explore an animated flag line chart of the first 20 by terms needed for 99% similarity. Results are cached locally.
+- **Difficulty Lab:** watch intermediate reconstructions beside the chart, then explore all measured countries in a full-width scrolling flag chart. Select table countries in a fixed side preview and open them in Studio. [Country preview](docs/screenshots/country-preview.jpg).
+- **Visual settings:** compact controls with matching coastline resolution previews, Japan’s islands, and South Africa’s interior hole. [Preview](docs/screenshots/settings-previews.jpg).
+- **Playback:** drag between marked speeds up to 8×; cycle time stays linked in both directions. [Preview](docs/screenshots/playback.jpg).
+- **Studio accuracy:** a wider curve updates automatically for the selected country and computation settings, with no calculate button. [Preview](docs/screenshots/studio-accuracy.jpg).
 - **Compare:** two to four countries with synchronized playback and distinct flag-derived colours. Accuracy curves update automatically; logarithmic N axes and every N from 1–25 in Studio and Compare reveal early detail. [Curve preview](docs/screenshots/compare-curves.jpg).
 - **Export:** PNG, SVG, WebM, settings, coefficients, and measured CSV data. Shareable URLs and local presets included.
 

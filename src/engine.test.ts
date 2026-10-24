@@ -5,6 +5,7 @@ import { constructionAt, constructionSequence } from "./construction";
 import { rankTermsFor99 } from "./rankingData";
 import { compareColors } from "./compareColors";
 import { termAxisPosition, termAxisTicks } from "./chartScale";
+import { PLAYBACK_SPEEDS, nearestPlaybackSpeed } from "./playbackSpeed";
 import {
   coefficients,
   fft,
@@ -20,6 +21,17 @@ import {
 } from "./engine";
 const geometry = (id: string) =>
   JSON.parse(fs.readFileSync(`public/data/50m-${id}.json`, "utf8")) as Geometry;
+
+test("playback speed snaps to slow options and two-times steps through eight", () => {
+  assert.deepEqual(PLAYBACK_SPEEDS.slice(3), [2, 4, 6, 8]);
+  for (const speed of PLAYBACK_SPEEDS)
+    assert.equal(nearestPlaybackSpeed(speed), speed);
+  assert.equal(nearestPlaybackSpeed(3.9), 4);
+  assert.equal(nearestPlaybackSpeed(6.1), 6);
+  assert.equal(nearestPlaybackSpeed(100), 8);
+  assert.equal(nearestPlaybackSpeed(-10), 0.25);
+  assert.equal(nearestPlaybackSpeed(NaN), 1);
+});
 
 test("logarithmic term axis expands early detail without changing N values", () => {
   assert.equal(termAxisPosition(1, 1000), 0);
@@ -105,7 +117,7 @@ test("99-percent term ranking sorts measured counts and distinguishes budget lim
     rankTermsFor99(
       Array.from({ length: 30 }, (_, i) => ({ ...rows[0], id: String(i) })),
     ).length,
-    20,
+    30,
   );
 });
 

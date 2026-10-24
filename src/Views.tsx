@@ -4,6 +4,7 @@ import {
   ArrowRight,
   Beaker,
   Check,
+  Clock3,
   Download,
   Globe2,
   Info,
@@ -50,6 +51,7 @@ export function DifficultyLab({
   settings,
   terms,
   onTerms,
+  onOpenStudio,
   appearance,
   clock,
   dark,
@@ -59,6 +61,7 @@ export function DifficultyLab({
   settings: Settings;
   terms: number;
   onTerms: (n: number) => void;
+  onOpenStudio: (id: string) => void;
   appearance: Appearance;
   clock: React.RefObject<Clock>;
   dark: boolean;
@@ -66,6 +69,7 @@ export function DifficultyLab({
   const cacheKey = `forma-lab-v3-${Object.values(config).slice(1).join("-")}-${settings.cap}-${settings.step}`,
     [rows, setRows] = useState<Row[]>([]),
     [country, setCountry] = useState(config.country),
+    [followCalculation, setFollowCalculation] = useState(true),
     [filter, setFilter] = useState(""),
     [sort, setSort] = useState("difficulty"),
     [running, setRunning] = useState(false),
@@ -113,8 +117,7 @@ export function DifficultyLab({
   const job = useRef<ReturnType<typeof runSearch> | undefined>(undefined),
     cancel = useRef(false);
   const modelConfig = { ...config, country },
-    preview = useAnalysis(modelConfig, terms),
-    selected = rows.find((r) => r.id === country);
+    preview = useAnalysis(modelConfig, terms);
   useEffect(() => {
     try {
       setRows(JSON.parse(localStorage.getItem(cacheKey) || "[]"));
@@ -133,6 +136,7 @@ export function DifficultyLab({
     setBatch(includeExisting ? datasetCountries.map((c) => c.id) : ids);
     setBatchDone(includeExisting ? rows.map((r) => r.id) : []);
     setRunning(true);
+    setFollowCalculation(true);
     setError("");
     let current = [...rows];
     try {
@@ -235,15 +239,197 @@ export function DifficultyLab({
     [rows, datasetCountries, filter, sort],
   );
   const liveCountry = datasetCountries.find((c) => c.id === activeCountry),
-    showingLive = running && Boolean(activeCountry),
+    showingLive = running && Boolean(activeCountry) && followCalculation,
     liveAnalysis = live.country === activeCountry ? live.analysis : undefined,
     displayAnalysis = showingLive ? liveAnalysis : preview.analysis,
     displayTerms = showingLive ? liveAnalysis?.terms : terms,
     displayBusy = showingLive ? !liveAnalysis : preview.busy,
-    limit = Math.min(settings.cap, settings.samples);
+    limit = Math.min(settings.cap, settings.samples),
+    displayId = showingLive ? activeCountry : country,
+    displayCountry = datasetCountries.find((c) => c.id === displayId);
+  const scoredCountry = rows.find((r) => r.id === displayId);
+  const termDemand = scoredCountry
+    ? 80 *
+      Math.min(
+        1,
+        (first(scoredCountry.curve, 95) ?? scoredCountry.cap) /
+          scoredCountry.cap,
+      )
+    : 0;
+  const borderDetail = scoredCountry ? 20 * scoredCountry.entropy : 0;
+  const previewAspect = useMemo(() => {
+    let xmin = Infinity,
+      xmax = -Infinity,
+      ymin = Infinity,
+      ymax = -Infinity;
+    for (const contour of displayAnalysis?.model.contours || [])
+      for (const [x, y] of contour.points) {
+        xmin = Math.min(xmin, x);
+        xmax = Math.max(xmax, x);
+        ymin = Math.min(ymin, y);
+        ymax = Math.max(ymax, y);
+      }
+    return Number.isFinite(xmin)
+      ? Math.max(
+          0.55,
+          Math.min(2.5, (xmax - xmin) / Math.max(ymax - ymin, 1e-9)),
+        )
+      : 1.4;
+  }, [displayAnalysis?.model]);
+  const selectCountry = (id: string) => {
+    setCountry(id);
+    setFollowCalculation(false);
+    if (matchMedia("(max-width: 700px)").matches)
+      requestAnimationFrame(() =>
+        document
+          .querySelector(".lab-results .country-preview")
+          ?.scrollIntoView({
+            block: "start",
+            behavior: matchMedia("(prefers-reduced-motion: reduce)").matches
+              ? "instant"
+              : "smooth",
+          }),
+      );
+  };
   const remaining = useMemo(
     () => datasetCountries.filter((c) => !rows.some((r) => r.id === c.id)),
     [datasetCountries, rows],
+  );
+  const countryPreview = (
+    <aside
+      className={`surface country-preview ${showingLive ? "is-calculating" : ""}`}
+      aria-label="Selected country preview"
+      aria-busy={displayBusy}
+    >
+      <div className="country-preview-heading">
+        <span className="section-eyebrow">
+          {showingLive ? "BUILDING THE BORDER" : "COUNTRY"}
+        </span>
+        {showingLive && (
+          <span className="small-tag live-calculation-tag">CALCULATING</span>
+        )}
+      </div>
+      <div
+        className="country-preview-name"
+        key={`name-${displayId}`}
+        aria-live="polite"
+      >
+        <Flag country={displayCountry} />
+        <div>
+          <h2>{displayCountry?.name || displayId}</h2>
+          <span>
+            {displayCountry?.continent} &middot; {displayId}
+          </span>
+        </div>
+      </div>
+      <div
+        className="country-preview-visual"
+        style={{ "--country-aspect": previewAspect } as React.CSSProperties}
+      >
+        <div className="experiment-canvas" key={`outline-${displayId}`}>
+          <FourierCanvas
+            analysis={displayAnalysis}
+            appearance={{
+              ...appearance,
+              grid: false,
+              zoom: showingLive
+                ? 1
+                : Math.min(1.5, Math.max(0.85, previewAspect * 0.68)),
+              fullTrace: true,
+              ...(showingLive
+                ? { circles: true, arms: true, tip: true, reference: true }
+                : {}),
+            }}
+            clock={showingLive ? liveClock : clock}
+            dark={dark}
+            label={
+              showingLive
+                ? `${liveCountry?.name || activeCountry} building with ${displayTerms ?? 0} Fourier terms`
+                : `${displayCountry?.name || country} country preview`
+            }
+          />
+          {displayBusy && (
+            <div className="live-drawing-loading">
+              <LoaderCircle size={24} />
+              <span>Preparing this outline</span>
+            </div>
+          )}
+        </div>
+        {!showingLive && (
+          <div className="country-preview-legend">
+            {appearance.reference && (
+              <span>
+                <i />
+                Reference border
+              </span>
+            )}
+            <span>
+              <i />
+              Fourier outline
+            </span>
+          </div>
+        )}
+      </div>
+      {showingLive ? (
+        <div className="live-term-progress">
+          <div>
+            <span>Adding Fourier detail</span>
+            <strong>
+              {displayTerms ? `N = ${displayTerms}` : "—"}
+              <small> / {limit}</small>
+            </strong>
+          </div>
+          <div className="live-term-track">
+            <i style={{ width: `${((displayTerms ?? 0) / limit) * 100}%` }} />
+          </div>
+          <p>Each shape is the actual result at this N.</p>
+        </div>
+      ) : (
+        <Slider
+          label="Fourier terms (N)"
+          value={terms}
+          min={1}
+          max={Math.min(settings.cap, settings.samples)}
+          onChange={onTerms}
+        />
+      )}
+      <div className="experiment-stats">
+        <div>
+          <small>Similarity</small>
+          <b>
+            {displayBusy ? "…" : displayAnalysis?.metrics.similarity.toFixed(2)}
+            <em>%</em>
+          </b>
+        </div>
+        <div>
+          <small>Boundary error</small>
+          <b>
+            {displayBusy ? "…" : displayAnalysis?.metrics.mean.toFixed(2)}
+            <em>%</em>
+          </b>
+        </div>
+      </div>
+      {preview.error && !showingLive && (
+        <p className="note" role="alert">
+          {preview.error}
+        </p>
+      )}
+      {running && !showingLive && (
+        <button
+          className="text-button follow-calculation"
+          onClick={() => setFollowCalculation(true)}
+        >
+          <LoaderCircle size={14} className="spin" /> Follow calculation
+        </button>
+      )}
+      <button
+        className="button secondary open-studio"
+        onClick={() => onOpenStudio(displayId)}
+      >
+        <span>Open in Studio</span>
+        <ArrowRight size={16} />
+      </button>
+    </aside>
   );
   return (
     <div className="lab-view">
@@ -300,7 +486,7 @@ export function DifficultyLab({
           </button>
         </div>
       </div>
-      {batch.length > 0 && (
+      {running && batch.length > 0 && (
         <section
           className={`surface country-progress ${running ? "is-running" : ""}`}
           aria-label="Country analysis progress"
@@ -362,268 +548,270 @@ export function DifficultyLab({
         </section>
       )}
       <div
-        className={`lab-top ${showingLive ? "is-calculating" : ""}`}
-        aria-busy={showingLive && !liveAnalysis}
+        className={`lab-ranking-layout ${showingLive ? "is-calculating" : ""}`}
       >
         <TermRanking
           rows={rows}
           countries={datasetCountries}
           step={settings.step}
-          onSelect={setCountry}
+          selectedId={displayId}
+          onSelect={selectCountry}
         />
-        <div className="surface experiment">
+        {showingLive && countryPreview}
+      </div>
+      <div
+        className={`lab-results ${showingLive ? "following-calculation" : ""}`}
+      >
+        <div className="surface ranking">
           <div className="card-heading">
-            <h2>{showingLive ? "Building the border" : "Your experiment"}</h2>
-            <span
-              className={`small-tag ${showingLive ? "live-calculation-tag" : ""}`}
-            >
-              {showingLive ? "CALCULATING" : "LIVE"}
-            </span>
-          </div>
-          <div className="experiment-canvas">
-            {showingLive && (
-              <div className="live-drawing-caption">
-                <Flag country={liveCountry} />
-                <strong>{liveCountry?.name || activeCountry}</strong>
-                <span>
-                  {displayTerms ? `N = ${displayTerms}` : "Preparing…"}
-                </span>
-              </div>
-            )}
-            <FourierCanvas
-              analysis={displayAnalysis}
-              appearance={{
-                ...appearance,
-                grid: false,
-                zoom: showingLive ? 1 : 0.85,
-                fullTrace: true,
-                ...(showingLive
-                  ? { circles: true, arms: true, tip: true, reference: true }
-                  : {}),
-              }}
-              clock={showingLive ? liveClock : clock}
-              dark={dark}
-              label={
-                showingLive
-                  ? `${liveCountry?.name || activeCountry} building with ${displayTerms ?? 0} Fourier terms`
-                  : `${country} reconstruction experiment`
-              }
-            />
-            {showingLive && !liveAnalysis && (
-              <div className="live-drawing-loading">
-                <LoaderCircle size={24} />
-                <span>Preparing this outline</span>
-              </div>
-            )}
-          </div>
-          {showingLive ? (
-            <div className="live-term-progress">
-              <div>
-                <span>Adding Fourier detail</span>
-                <strong>
-                  {displayTerms ? `N = ${displayTerms}` : "—"}
-                  <small> / {limit}</small>
-                </strong>
-              </div>
-              <div className="live-term-track">
-                <i
-                  style={{ width: `${((displayTerms ?? 0) / limit) * 100}%` }}
+            <div>
+              <span className="section-eyebrow">A FAIR COMPARISON</span>
+              <h2>The geography of difficulty</h2>
+            </div>
+            <div className="ranking-tools">
+              <div className="search-input">
+                <Search size={16} />
+                <input
+                  aria-label="Search difficulty table"
+                  placeholder="Find a country…"
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value)}
                 />
               </div>
-              <p>Each shape is the actual result at this N.</p>
+              <label className="sort-select">
+                <ArrowDownUp size={15} />
+                <select
+                  aria-label="Sort difficulty ranking"
+                  value={sort}
+                  onChange={(e) => setSort(e.target.value)}
+                >
+                  <option value="difficulty">Difficulty</option>
+                  <option value="accuracy">Accuracy</option>
+                  <option value="name">Country A–Z</option>
+                </select>
+              </label>
             </div>
-          ) : (
-            <Slider
-              label="Term budget"
-              value={terms}
-              min={1}
-              max={Math.min(settings.cap, settings.samples)}
-              onChange={onTerms}
-            />
+          </div>
+          {(running || error) && (
+            <div className="analysis-status" role="status">
+              {running && <LoaderCircle className="spin" size={15} />}{" "}
+              {error || status}
+            </div>
           )}
-          <div className="experiment-stats">
-            <div>
-              <small>Similarity</small>
-              <b>
-                {displayBusy
-                  ? "…"
-                  : displayAnalysis?.metrics.similarity.toFixed(2)}
-                <em>%</em>
-              </b>
-            </div>
-            <div>
-              <small>Mean boundary error</small>
-              <b>
-                {displayBusy ? "…" : displayAnalysis?.metrics.mean.toFixed(2)}
-                <em>%</em>
-              </b>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div className="surface ranking">
-        <div className="card-heading">
-          <div>
-            <span className="section-eyebrow">A FAIR COMPARISON</span>
-            <h2>The geography of difficulty</h2>
-          </div>
-          <div className="ranking-tools">
-            <div className="search-input">
-              <Search size={16} />
-              <input
-                aria-label="Search difficulty table"
-                placeholder="Find a country…"
-                value={filter}
-                onChange={(e) => setFilter(e.target.value)}
-              />
-            </div>
-            <label className="sort-select">
-              <ArrowDownUp size={15} />
-              <select
-                aria-label="Sort difficulty ranking"
-                value={sort}
-                onChange={(e) => setSort(e.target.value)}
-              >
-                <option value="difficulty">Difficulty</option>
-                <option value="accuracy">Accuracy</option>
-                <option value="name">Country A–Z</option>
-              </select>
-            </label>
-          </div>
-        </div>
-        {(running || error) && (
-          <div className="analysis-status" role="status">
-            {running && <LoaderCircle className="spin" size={15} />}{" "}
-            {error || status}
-          </div>
-        )}
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>Country</th>
-                <th>
-                  Difficulty <Info size={12} />
-                </th>
-                <th>90% terms</th>
-                <th>95% terms</th>
-                <th>99% terms</th>
-                <th>Best tested</th>
-                <th>
-                  <span className="components-heading">
-                    Components{" "}
-                    <span
-                      className="help"
-                      tabIndex={0}
-                      role="img"
-                      aria-label="Separate land areas in the map dataset, such as mainland and islands. Counts all land areas even when only the main outline is drawn. Not Fourier terms."
-                      title="Separate land areas in the dataset: mainland and islands. Includes all areas even in Main outline mode. This is not the number of Fourier terms."
-                    >
-                      <Info size={12} />
-                    </span>
-                  </span>
-                  <small className="components-caption">
-                    Separate land areas
-                  </small>
-                </th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.map(({ country: c, row }) => (
-                <tr key={c.id} className={c.id === country ? "selected" : ""}>
-                  <td>
-                    <button
-                      className="table-country"
-                      onClick={() => setCountry(c.id)}
-                    >
-                      <Flag country={c} />
-                      <span>
-                        {c.name}
-                        <small>{c.id}</small>
+          <div
+            className="table-scroll"
+            tabIndex={0}
+            role="region"
+            aria-label="Country results; scroll to explore"
+          >
+            <table>
+              <thead>
+                <tr>
+                  <th>Country</th>
+                  <th>
+                    Difficulty <Info size={12} />
+                  </th>
+                  <th>90% terms</th>
+                  <th>95% terms</th>
+                  <th>99% terms</th>
+                  <th>Best tested</th>
+                  <th>
+                    <span className="components-heading">
+                      Components{" "}
+                      <span
+                        className="help"
+                        tabIndex={0}
+                        role="img"
+                        aria-label="Separate land areas in the map dataset, such as mainland and islands. Counts all land areas even when only the main outline is drawn. Not Fourier terms."
+                        title="Separate land areas in the dataset: mainland and islands. Includes all areas even in Main outline mode. This is not the number of Fourier terms."
+                      >
+                        <Info size={12} />
                       </span>
-                    </button>
-                  </td>
-                  <td>
-                    {row ? (
-                      <>
-                        <span className="difficulty-number">
-                          {row.difficulty.toFixed(1)}
+                    </span>
+                    <small className="components-caption">
+                      Separate land areas
+                    </small>
+                  </th>
+                  <th aria-label="Calculation status" />
+                </tr>
+              </thead>
+              <tbody>
+                {sorted.map(({ country: c, row }) => (
+                  <tr
+                    key={c.id}
+                    className={c.id === displayId ? "selected" : ""}
+                    onClick={(event) => {
+                      if (!(event.target as HTMLElement).closest("button"))
+                        selectCountry(c.id);
+                    }}
+                  >
+                    <td>
+                      <button
+                        className="table-country"
+                        aria-pressed={c.id === displayId}
+                        onClick={() => selectCountry(c.id)}
+                      >
+                        <Flag country={c} />
+                        <span>
+                          {c.name}
+                          <small>{c.id}</small>
                         </span>
-                        <span className="difficulty-bar">
-                          <i style={{ width: `${row.difficulty}%` }} />
-                        </span>
-                      </>
-                    ) : (
-                      <span className="unavailable">Not analyzed</span>
-                    )}
-                  </td>
-                  {[90, 95, 99].map((t) => (
-                    <td key={t}>
-                      {row
-                        ? (first(row.curve, t) ?? (
-                            <span className="unavailable">Not reached</span>
-                          ))
-                        : "—"}
+                      </button>
                     </td>
-                  ))}
-                  <td>{row ? `${row.best.toFixed(2)}%` : "—"}</td>
-                  <td>{row ? row.components : "—"}</td>
-                  <td>
-                    <button
-                      className="text-button"
-                      disabled={running || Boolean(row)}
-                      onClick={() => {
-                        setCountry(c.id);
-                        compute([c.id]);
-                      }}
-                    >
+                    <td>
                       {row ? (
                         <>
-                          <Check size={13} />
-                          Calculated
+                          <span className="difficulty-number">
+                            {row.difficulty.toFixed(1)}
+                          </span>
+                          <span className="difficulty-bar">
+                            <i style={{ width: `${row.difficulty}%` }} />
+                          </span>
                         </>
                       ) : (
-                        <>
-                          Calculate <ArrowRight size={13} />
-                        </>
+                        <span className="unavailable">—</span>
                       )}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    </td>
+                    {[90, 95, 99].map((t) => (
+                      <td key={t}>
+                        {row
+                          ? (first(row.curve, t) ?? (
+                              <span
+                                className="unavailable"
+                                title={`Not reached within ${row.cap} tested terms`}
+                                aria-label={`${t} percent not reached within ${row.cap} tested terms`}
+                              >
+                                —
+                              </span>
+                            ))
+                          : "—"}
+                      </td>
+                    ))}
+                    <td>{row ? `${row.best.toFixed(2)}%` : "—"}</td>
+                    <td>{row ? row.components : "—"}</td>
+                    <td>
+                      <button
+                        className={`country-calculation-status ${row ? "is-complete" : "is-pending"}`}
+                        aria-label={
+                          row
+                            ? `${c.name} calculated`
+                            : activeCountry === c.id && running
+                              ? `Calculating ${c.name}`
+                              : `Calculate ${c.name}`
+                        }
+                        title={
+                          row
+                            ? "Calculated"
+                            : activeCountry === c.id && running
+                              ? "Calculating"
+                              : "Pending · click to calculate"
+                        }
+                        disabled={running || Boolean(row)}
+                        onClick={() => {
+                          setCountry(c.id);
+                          compute([c.id]);
+                        }}
+                      >
+                        {row ? (
+                          <Check size={17} />
+                        ) : running && activeCountry === c.id ? (
+                          <LoaderCircle size={17} className="spin" />
+                        ) : (
+                          <Clock3 size={17} />
+                        )}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="table-foot">
+            {rows.length} analyzed ·{" "}
+            {settings.resolution === "50m" ? "1:50 million" : "1:110 million"} ·{" "}
+            {settings.samples} samples for longest contour · {settings.cap}-term
+            cap · step {settings.step}
+          </div>
         </div>
-        <div className="table-foot">
-          {rows.length} analyzed ·{" "}
-          {settings.resolution === "50m" ? "1:50 million" : "1:110 million"} ·{" "}
-          {settings.samples} samples for longest contour · {settings.cap}-term
-          cap · step {settings.step}
-        </div>
+        {!showingLive && countryPreview}
       </div>
       <details className="methodology surface">
         <summary>
           <Info size={18} />
           How difficulty is measured
         </summary>
-        <div>
-          <h3>Difficulty, with the workings shown.</h3>
-          <p>
-            Score = 80 × min(terms for 95% ÷ term cap, 1) + 20 × normalized
-            spectral energy entropy. If 95% was not reached, its budget
-            component is 80 and the result is censored by this budget.
-            Categories: 0–20 low, 20–40 moderate, 40–60 high, 60–80 very high,
-            80–100 extreme within this configuration. Uncomputed countries stay
-            unranked.
-          </p>
-          <p>
-            Thresholds are the first measured qualifying term count on the
-            selected search grid. All rows share the same dataset, projection,
-            contour mode, sample count, score, and search budget. Area is not a
-            difficulty input. Island count is reported separately; main-outline
-            mode excludes disconnected land.
-          </p>
+        <div className="methodology-layout">
+          <div>
+            <h3>Difficulty, with the workings shown.</h3>
+            <div
+              className="difficulty-formula"
+              aria-label="Score equals 80 times the smaller of terms for 95 percent divided by the term cap or one, plus 20 times normalized spectral energy entropy"
+            >
+              <span>
+                80 × min(N<sub>95</sub> / N<sub>cap</sub>, 1)
+              </span>
+              <b>+</b>
+              <span>20 × entropy</span>
+            </div>
+            <p>
+              <strong>Term demand (0–80)</strong> measures how many terms reach
+              95% similarity.
+              <strong> Border detail (0–20)</strong> measures how widely Fourier
+              energy is spread. If 95% is not reached, term demand is 80 and the
+              score is limited by the tested budget.
+            </p>
+            <p>
+              Thresholds use the first qualifying N on the tested grid.
+              Countries share the same dataset, sampling, and budget. Country
+              area is not part of the score; separate land areas are counted
+              independently.
+            </p>
+          </div>
+          <aside
+            className="score-breakdown"
+            aria-label="Selected country difficulty breakdown"
+            key={displayId}
+          >
+            <div className="score-breakdown-heading">
+              <Flag country={displayCountry} />
+              <span>{displayCountry?.name || displayId}</span>
+              <strong>
+                {scoredCountry ? scoredCountry.difficulty.toFixed(2) : "—"}
+                <small> / 100</small>
+              </strong>
+            </div>
+            {scoredCountry ? (
+              <>
+                <div className="score-component">
+                  <span>Term demand</span>
+                  <b>
+                    {termDemand.toFixed(2)}
+                    <small> / 80</small>
+                  </b>
+                  <div className="score-component-track">
+                    <i style={{ width: `${(termDemand / 80) * 100}%` }} />
+                  </div>
+                </div>
+                <div className="score-component border-detail">
+                  <span>Border detail</span>
+                  <b>
+                    {borderDetail.toFixed(2)}
+                    <small> / 20</small>
+                  </b>
+                  <div className="score-component-track">
+                    <i style={{ width: `${(borderDetail / 20) * 100}%` }} />
+                  </div>
+                </div>
+                <div className="score-addition">
+                  <span>{termDemand.toFixed(2)}</span> +{" "}
+                  <span>{borderDetail.toFixed(2)}</span> ={" "}
+                  <strong>{scoredCountry.difficulty.toFixed(2)}</strong>
+                </div>
+              </>
+            ) : (
+              <p>Calculate this country to reveal its score breakdown.</p>
+            )}
+          </aside>
         </div>
       </details>
     </div>
@@ -934,7 +1122,8 @@ export function CompareView({
           <span>One clock. Every country in sync.</span>
         </div>
         <span>
-          {clock.current.duration}s per cycle · {clock.current.speed}×
+          {Number((clock.current.duration / clock.current.speed).toFixed(2))}s
+          per cycle · {clock.current.speed}×
         </span>
       </div>
       {running && (

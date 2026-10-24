@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { ChevronDown, Gauge, X } from "lucide-react";
+import { PLAYBACK_SPEEDS, nearestPlaybackSpeed } from "./playbackSpeed";
 export default function Playback({
   speed,
   onSpeed,
@@ -19,6 +20,7 @@ export default function Playback({
   const [open, setOpen] = useState(false),
     root = useRef<HTMLDivElement>(null),
     trigger = useRef<HTMLButtonElement>(null);
+  const speedIndex = PLAYBACK_SPEEDS.indexOf(nearestPlaybackSpeed(speed));
   useEffect(() => {
     if (!open) return;
     const pointer = (e: PointerEvent) => {
@@ -73,42 +75,74 @@ export default function Playback({
                 <X size={16} />
               </button>
             </div>
-            <div className="control-label">
-              <label>Playback speed</label>
-              <b className="speed-value">{speed}×</b>
-            </div>
-            <div className="speed-options">
-              {[0.25, 0.5, 1, 2, 4].map((v) => (
-                <button
-                  key={v}
-                  className={speed === v ? "active" : ""}
-                  onClick={() => onSpeed(v)}
-                >
-                  {v}×
-                </button>
-              ))}
-            </div>
-            <input
-              className="range speed-range"
-              type="range"
-              aria-label="Custom animation speed"
-              min={0.1}
-              max={4}
-              step={0.05}
-              value={speed}
-              onChange={(e) => onSpeed(Number(e.target.value))}
-            />
-            <div className="inline-selects">
-              <label>
-                Cycle duration
+            <div className="speed-dial">
+              <div className="speed-dial-heading">
+                <label htmlFor="playback-speed-control">Playback speed</label>
+                <output>
+                  <Gauge size={16} />
+                  {speed}×
+                </output>
+              </div>
+              <input
+                id="playback-speed-control"
+                className="range speed-step-range"
+                type="range"
+                aria-label="Playback speed"
+                aria-valuetext={`${speed} times playback speed`}
+                min={0}
+                max={PLAYBACK_SPEEDS.length - 1}
+                step={1}
+                value={speedIndex}
+                onChange={(e) =>
+                  onSpeed(PLAYBACK_SPEEDS[Number(e.target.value)])
+                }
+                style={
+                  {
+                    "--fill": `${(speedIndex / (PLAYBACK_SPEEDS.length - 1)) * 100}%`,
+                  } as React.CSSProperties
+                }
+              />
+              <div className="speed-dial-marks">
+                {PLAYBACK_SPEEDS.map((value, i) => (
+                  <button
+                    key={value}
+                    aria-label={`Set playback speed to ${value} times`}
+                    aria-pressed={i === speedIndex}
+                    onClick={() => onSpeed(value)}
+                  >
+                    <i />
+                    {value}×
+                  </button>
+                ))}
+              </div>
+              <label className="speed-cycle-reference">
+                At 1×
                 <select
-                  aria-label="Cycle duration"
+                  aria-label="Cycle time at normal speed"
                   value={duration}
                   onChange={(e) => onDuration(Number(e.target.value))}
                 >
-                  {[5, 10, 20, 30, 60, 120].map((n) => (
-                    <option key={n} value={n}>
-                      {n} seconds
+                  {[5, 10, 20, 30, 60, 120].map((seconds) => (
+                    <option value={seconds} key={seconds}>
+                      {seconds}s / outline
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="inline-selects">
+              <label>
+                Cycle time
+                <select
+                  aria-label="Cycle duration"
+                  value={speedIndex}
+                  onChange={(e) =>
+                    onSpeed(PLAYBACK_SPEEDS[Number(e.target.value)])
+                  }
+                >
+                  {PLAYBACK_SPEEDS.map((value, index) => (
+                    <option key={value} value={index}>
+                      {Number((duration / value).toFixed(2))} seconds
                     </option>
                   ))}
                 </select>

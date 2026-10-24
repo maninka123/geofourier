@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
-import { ArrowDownUp, ArrowUp } from "lucide-react";
+import { ArrowDownUp, ArrowLeft, ArrowRight, ArrowUp } from "lucide-react";
 import { Flag } from "./CountryPicker";
 import { rankTermsFor99, type TermResult } from "./rankingData";
 import type { Country } from "./engine";
@@ -9,11 +9,13 @@ export default function TermRanking({
   rows,
   countries,
   step,
+  selectedId,
   onSelect,
 }: {
   rows: TermResult[];
   countries: Country[];
   step: number;
+  selectedId: string;
   onSelect: (id: string) => void;
 }) {
   const [order, setOrder] = useState("fewer"),
@@ -25,7 +27,22 @@ export default function TermRanking({
   const reduced = useReducedMotion(),
     gradient = useId().replace(/:/g, "");
   const plot = useRef<HTMLDivElement>(null),
+    scroller = useRef<HTMLDivElement>(null),
     [width, setWidth] = useState(760);
+  const scrolledSelection = useRef(selectedId);
+  useEffect(() => {
+    if (scrolledSelection.current === selectedId) return;
+    const flag = plot.current?.querySelector<HTMLButtonElement>(
+      `button[data-country="${selectedId}"]`,
+    );
+    if (!flag || !scroller.current) return;
+    scrolledSelection.current = selectedId;
+    setActive(selectedId);
+    scroller.current.scrollTo({
+      left: Math.max(0, flag.offsetLeft - scroller.current.clientWidth / 2),
+      behavior: reduced ? "instant" : "smooth",
+    });
+  }, [selectedId, ranked, reduced]);
   useEffect(() => {
     if (!plot.current) return;
     const observer = new ResizeObserver(([entry]) =>
@@ -38,7 +55,7 @@ export default function TermRanking({
   const tickStep =
     maximum <= 50 ? 10 : maximum <= 100 ? 25 : maximum <= 250 ? 50 : 100;
   const ceiling = Math.max(tickStep, Math.ceil(maximum / tickStep) * tickStep);
-  const left = 48,
+  const left = 64,
     right = 22,
     top = 30,
     bottom = 214;
@@ -53,7 +70,15 @@ export default function TermRanking({
     y: y(r.terms ?? r.row.cap),
     country: countries.find((c) => c.id === r.row.id),
   }));
-  const selected = points.find((p) => p.row.id === active) || points.at(-1);
+  const selected =
+    points.find((p) => p.row.id === active) ||
+    points.find((p) => p.row.id === selectedId) ||
+    points[0];
+  const scrollCountries = (direction: number) =>
+    scroller.current?.scrollBy({
+      left: direction * scroller.current.clientWidth * 0.75,
+      behavior: reduced ? "instant" : "smooth",
+    });
   const animationKey = `${order}-${ranked.map((r) => `${r.row.id}:${r.terms ?? `>${r.row.cap}`}`).join("-")}`;
   const segments: (typeof points)[] = [];
   for (const point of points) {
@@ -93,7 +118,8 @@ export default function TermRanking({
         </label>
       </div>
       <p className="term-ranking-intro">
-        First tested N to reach 99% similarity · {ranked.length} countries
+        First tested N to reach 99% similarity · all {ranked.length} measured
+        countries
       </p>
       <div className="ranking-chart-detail" aria-live="polite">
         {selected ? (
@@ -114,14 +140,58 @@ export default function TermRanking({
       </div>
       <div
         className="ranking-chart-scroll"
+        ref={scroller}
         tabIndex={0}
-        aria-label="Country ranking plot; scroll horizontally on small screens"
+        role="region"
+        aria-label="Country ranking plot; scroll horizontally to explore all countries"
       >
-        <div className="ranking-chart-plot" ref={plot}>
+        <div className="ranking-chart-axis" aria-hidden="true">
+          <svg viewBox="0 0 54 224">
+            <text x="3" y="13" className="ranking-fixed-axis-title">
+              Terms (N)
+            </text>
+            {Array.from(
+              { length: Math.round(ceiling / tickStep) + 1 },
+              (_, i) => i * tickStep,
+            ).map((n) => (
+              <text key={n} x="44" y={y(n) + 4} textAnchor="end">
+                {n}
+              </text>
+            ))}
+          </svg>
+        </div>
+        <div
+          className="ranking-chart-plot"
+          ref={plot}
+          style={{
+            minWidth: ranked.length
+              ? Math.max(700, ranked.length * 56 + 70)
+              : 0,
+          }}
+        >
           <svg
             viewBox={`0 0 ${width} 238`}
             role="img"
             aria-label={`Line chart of Fourier terms to reach 99 percent, ${order === "fewer" ? "ascending" : "descending"} country order`}
+            onPointerMove={(event) => {
+              if (!points.length) return;
+              const rect = event.currentTarget.getBoundingClientRect();
+              const position =
+                (((event.clientX - rect.left) / rect.width) * width - left) /
+                (width - left - right);
+              setActive(
+                points[
+                  Math.max(
+                    0,
+                    Math.min(
+                      points.length - 1,
+                      Math.round(position * (points.length - 1)),
+                    ),
+                  )
+                ].row.id,
+              );
+            }}
+            onPointerLeave={() => setActive("")}
           >
             <defs>
               <linearGradient
@@ -139,9 +209,6 @@ export default function TermRanking({
                 />
               </linearGradient>
             </defs>
-            <text x={left} y="13" className="ranking-axis-title">
-              Fourier terms (N)
-            </text>
             {Array.from(
               { length: Math.round(ceiling / tickStep) + 1 },
               (_, i) => i * tickStep,
@@ -155,9 +222,6 @@ export default function TermRanking({
                   stroke="var(--border)"
                   strokeDasharray={n ? "3 5" : undefined}
                 />
-                <text x={left - 12} y={y(n) + 4} textAnchor="end">
-                  {n}
-                </text>
               </g>
             ))}
             {selected && (
@@ -201,8 +265,12 @@ export default function TermRanking({
                 key={`${animationKey}-${p.row.id}`}
                 initial={{ opacity: reduced ? 1 : 0 }}
                 animate={{ opacity: 1 }}
-                transition={{ duration: 0.2, delay: reduced ? 0 : i * 0.035 }}
+                transition={{
+                  duration: 0.2,
+                  delay: reduced ? 0 : Math.min(i * 0.02, 0.5),
+                }}
                 onMouseEnter={() => setActive(p.row.id)}
+                onClick={() => onSelect(p.row.id)}
                 className="ranking-chart-point"
               >
                 <title>
@@ -245,8 +313,10 @@ export default function TermRanking({
             {points.map((p) => (
               <button
                 key={p.row.id}
+                data-country={p.row.id}
                 style={{ left: `${(p.x / width) * 100}%` }}
-                className={selected?.row.id === p.row.id ? "selected" : ""}
+                className={`${selected?.row.id === p.row.id ? "selected" : ""} ${selectedId === p.row.id ? "current-country" : ""}`}
+                aria-pressed={selectedId === p.row.id}
                 aria-label={`${p.country?.name || p.row.id}: ${p.terms ?? `over ${p.row.cap}`} terms; view country`}
                 title={p.country?.name || p.row.id}
                 onPointerEnter={() => setActive(p.row.id)}
@@ -274,7 +344,25 @@ export default function TermRanking({
           <ArrowUp size={12} />
           99% not reached within budget
         </span>
-        <span className="ranking-swipe-hint">Swipe to explore →</span>
+        <div className="ranking-scroll-controls">
+          <span>Scroll to explore all countries</span>
+          <button
+            className="icon-button"
+            aria-label="Scroll countries left"
+            onClick={() => scrollCountries(-1)}
+            disabled={!points.length}
+          >
+            <ArrowLeft size={16} />
+          </button>
+          <button
+            className="icon-button"
+            aria-label="Scroll countries right"
+            onClick={() => scrollCountries(1)}
+            disabled={!points.length}
+          >
+            <ArrowRight size={16} />
+          </button>
+        </div>
       </div>
       <p className="term-ranking-note">
         Countries ordered by N · search step {step}. Hover a point or flag to
