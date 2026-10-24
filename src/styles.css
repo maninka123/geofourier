@@ -8438,6 +8438,14 @@ footer svg {
   background: var(--accent);
   box-shadow: 0 3px 12px #21805e20;
 }
+.custom-shapes-theme .brand > svg {
+  color: var(--accent);
+}
+.custom-shapes-theme .primary:hover,
+.custom-shapes-theme .play-button:hover {
+  background: #196b4e;
+  box-shadow: 0 4px 12px #21805e25;
+}
 .custom-shapes-theme input {
   accent-color: var(--accent);
 }
@@ -8449,6 +8457,10 @@ footer svg {
 [data-theme="dark"] .custom-shapes-theme .primary,
 [data-theme="dark"] .custom-shapes-theme .play-button {
   background: #247c5c;
+}
+[data-theme="dark"] .custom-shapes-theme .primary:hover,
+[data-theme="dark"] .custom-shapes-theme .play-button:hover {
+  background: #2b8968;
 }
 .custom-empty {
   min-height: 390px;
