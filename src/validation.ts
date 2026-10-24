@@ -68,7 +68,7 @@ export function componentResults(a: Analysis) {
       );
       const contours = indices.map((i) => a.model.contours[i]);
       const exterior = contours.find((c) => !c.hole)!;
-      const points = contours.flatMap((c) => c.points),
+      const points = contours.flatMap((c) => c.source || c.points),
         xs = points.map((p) => p[0]),
         ys = points.map((p) => p[1]);
       const xmin = Math.min(...xs),
@@ -87,7 +87,7 @@ export function componentResults(a: Analysis) {
           diagonal: diagonal * scale,
           contours: contours.map((c) => ({
             ...c,
-            points: shift(c.points),
+            points: shift(c.source || c.points),
             perimeter: c.perimeter * scale,
           })),
         },
@@ -105,7 +105,7 @@ export function componentResults(a: Analysis) {
         holes: contours.filter((c) => c.hole).length,
         terms: Math.min(a.terms, exterior.coefficients.length),
         metrics,
-        points: exterior.points,
+        points: exterior.source || exterior.points,
         path: a.paths[indices.find((i) => !a.model.contours[i].hole)!],
       };
     })
@@ -125,14 +125,6 @@ export async function validate(
   cancelled = () => false,
 ) {
   const a = analyze(model, terms);
-  const sourceModel: Model = {
-    ...model,
-    contours: model.contours.map((c) => ({
-      ...c,
-      points: c.source || c.points,
-    })),
-  };
-  const sourceMetrics = measure(sourceModel, a.paths);
   const errors = a.paths.map((path, i) => {
     const reference = model.contours[i].source || model.contours[i].points;
     const hits = path.map((p) => nearestOnBoundary(p, reference));
@@ -215,15 +207,13 @@ export async function validate(
       samples,
       similarity: result.metrics.similarity,
       error: result.metrics.mean,
-      sourceError: measure(sourceModel, result.paths).mean,
       energy: retainedEnergy(m, terms),
     });
     await new Promise((r) => setTimeout(r, 0));
   }
   return {
     terms,
-    sampled: a.metrics,
-    source: sourceMetrics,
+    source: a.metrics,
     energy: retainedEnergy(model, terms),
     errors,
     curve,

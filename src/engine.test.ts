@@ -231,11 +231,24 @@ test("retained energy excludes translation and converges to 100 percent", () => 
   assert.ok(rows[0].area >= rows[1].area);
   assert.ok(rows.every((r) => Number.isFinite(r.metrics.mean)));
 });
-test("validation distinguishes the sampled and original dataset contours and measures sampling sensitivity", async () => {
+test("all displayed scores compare against the original dataset, even at the complete sampled basis", async () => {
   const m = prepare(geometry("LKA"), 32, "main"),
     r = await validate(m, 32, 32);
-  assert.ok(r.sampled.similarity > 99.999);
-  assert.ok(r.source.mean > r.sampled.mean);
+  const a = analyze(m, 32);
+  const sampled = measure(m, a.paths);
+  assert.ok(sampled.similarity > 99.999);
+  assert.ok(r.source.mean > sampled.mean);
+  assert.deepEqual(a.metrics, r.source);
+  assert.deepEqual(
+    a.metrics,
+    measure(
+      { ...m, contours: m.contours.map((c) => ({ ...c, points: c.source! })) },
+      a.paths,
+    ),
+  );
+  assert.ok(
+    r.curve.every((p) => p.n !== 32 || p.similarity === a.metrics.similarity),
+  );
   assert.equal(r.energy, 100);
   assert.deepEqual(
     r.sensitivity.map((s) => s.samples),
@@ -411,7 +424,8 @@ for (const id of [
         );
     }
     const result = analyze(model, 256);
-    assert.ok(result.metrics.similarity > 99.999999);
+    // Exact recovery applies to the FFT input; the displayed score uses the original map.
+    assert.ok(measure(model, result.paths).similarity > 99.999999);
   });
 test("changing the Fourier budget changes geometry and measured score", () => {
   const model = prepare(geometry("BGD"), 512);

@@ -21,7 +21,7 @@ npm run dev
 
 `npm test` checks the mathematics, imports and validation. `npm run build` produces `dist/`. Pushes to `main` test, build and deploy to GitHub Pages.
 
-**Measurements:** similarity combines silhouette overlap (70%) and boundary score (30%). Studio distinguishes sampled-contour accuracy from the original map dataset; neither is real-world coastline accuracy. Timings are device-specific. [Methods and limits](docs/MATHEMATICS.md).
+**Measurements:** one similarity score against the original boundary combines silhouette overlap (70%) and boundary score (30%). Scores approximate the map dataset, not real-world coastline accuracy. Timings are device-specific. [Methods and limits](docs/MATHEMATICS.md).
 
 **Built with:** React, TypeScript, Vite, Canvas and a Web Worker FFT engine. No backend or API key.
 

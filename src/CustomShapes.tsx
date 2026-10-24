@@ -434,7 +434,13 @@ function CustomShapes({
             <div className="custom-shape-canvas">
               <FourierCanvas
                 analysis={analysis}
-                appearance={{ ...appearance, fullTrace: true, grid: true }}
+                appearance={{
+                  ...appearance,
+                  color: dark ? "#50c79b" : "#21805e",
+                  heatmap: false,
+                  fullTrace: true,
+                  grid: true,
+                }}
                 clock={clock}
                 dark={dark}
                 label={`${input.name}, ${terms} Fourier terms per contour`}
@@ -495,7 +501,7 @@ function CustomShapes({
             </label>
             <div className="experiment-stats">
               <div>
-                <small>Sampled similarity</small>
+                <small>Boundary similarity</small>
                 <b>
                   {analysis?.metrics.similarity.toFixed(2)}
                   <em>%</em>

@@ -558,7 +558,9 @@ export default function App() {
   const fmtTime = (time: number) =>
     `${String(Math.floor(time / 60)).padStart(2, "0")}:${String(Math.floor(time % 60)).padStart(2, "0")}.${String(Math.floor(time * 10) % 10)}`;
   return (
-    <div className={`app ${clean ? "clean-mode" : ""}`}>
+    <div
+      className={`app ${clean ? "clean-mode" : ""} ${tab === "Custom Shapes" ? "custom-shapes-theme" : ""}`}
+    >
       {!clean && (
         <>
           <header className="site-header">

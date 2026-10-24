@@ -36,13 +36,13 @@ export function SimilarityExplainer({ analysis }: { analysis?: Analysis }) {
           <svg
             viewBox="0 0 300 270"
             role="img"
-            aria-label="Compare the actual sampled outline and Fourier reconstruction"
+            aria-label="Compare the original boundary and Fourier reconstruction"
           >
             {view !== "Fourier" &&
               analysis?.model.contours.map((c, i) => (
                 <path
                   key={`original-${i}`}
-                  d={svgPath(c.points)}
+                  d={svgPath(c.source || c.points)}
                   fill="none"
                   stroke="#9aa3b4"
                   strokeWidth="1.5"
@@ -126,11 +126,12 @@ export function SimilarityExplainer({ analysis }: { analysis?: Analysis }) {
           </div>
           <h3>What is being compared?</h3>
           <p>
-            The selected, sampled contour geometry. N coefficients apply
-            separately to each ring. A complete Fourier basis recovers the
-            sample points to numerical precision. Increasing-N search tests
-            measured values without assuming monotonicity; the first match is
-            limited by the chosen search step and budget.
+            The original boundary in the selected map dataset. Evenly spaced
+            points are used to calculate the Fourier series; scores are checked
+            against the original boundary. N applies separately to each ring.
+            Increasing-N search tests measured values without assuming
+            monotonicity; the first match is limited by the chosen search step
+            and budget.
           </p>
           <h3>Geographic assumptions</h3>
           <p>

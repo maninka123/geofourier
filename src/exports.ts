@@ -34,7 +34,7 @@ export function exportSvg(
     body += a.model.contours
       .map(
         (c) =>
-          `<path d="${c.points.map(([x, y], i) => `${i ? "L" : "M"}${cx + x * scale},${cy + y * scale}`).join(" ")}Z" fill="none" stroke="#8793a6" stroke-width="${unit}"/>`,
+          `<path d="${(c.source || c.points).map(([x, y], i) => `${i ? "L" : "M"}${cx + x * scale},${cy + y * scale}`).join(" ")}Z" fill="none" stroke="#8793a6" stroke-width="${unit}"/>`,
       )
       .join("");
   body += a.paths

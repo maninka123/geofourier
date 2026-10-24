@@ -134,7 +134,7 @@ export function draw(
     ctx.strokeStyle = dark ? "#dce5f085" : "#727f94a0";
     ctx.lineWidth = 1.15;
     for (const c of a.model.contours) {
-      path(ctx, c.points, scale);
+      path(ctx, c.source || c.points, scale);
       ctx.stroke();
     }
   }

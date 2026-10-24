@@ -377,7 +377,16 @@ export function measure(model: Model, paths: Point[][]): Metrics {
 export function analyze(model: Model, terms: number): Analysis {
   const start = performance.now();
   const paths = model.contours.map((c) => reconstruct(c, terms));
-  const metrics = measure(model, paths);
+  const metrics = measure(
+    {
+      ...model,
+      contours: model.contours.map((c) => ({
+        ...c,
+        points: c.source || c.points,
+      })),
+    },
+    paths,
+  );
   return { model, paths, metrics, terms, elapsedMs: performance.now() - start };
 }
 export async function search(

@@ -8006,7 +8006,7 @@ footer svg {
 }
 .validation-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(140px, 0.38fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.05fr) minmax(160px, 0.46fr) minmax(0, 1fr);
   gap: 20px;
 }
 .error-closeups {
@@ -8040,10 +8040,10 @@ footer svg {
   color: var(--surface);
   background: var(--accent);
 }
-.error-closeups svg {
+.error-closeups figure > svg {
   display: block;
   width: 100%;
-  height: 112px;
+  height: 140px;
   overflow: hidden;
   background: var(--surface);
 }
@@ -8061,13 +8061,60 @@ footer svg {
   stroke-linecap: round;
 }
 .closeup-original {
-  stroke: var(--muted);
-  stroke-width: 1.5px;
-  stroke-dasharray: 4 3;
+  stroke: var(--secondary);
+  stroke-width: 1.8px;
+  stroke-dasharray: 5 4;
 }
 .closeup-reconstruction {
   stroke: var(--accent);
-  stroke-width: 2px;
+  stroke-width: 2.5px;
+}
+.closeup-open {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  margin-left: auto;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.boundary-closeup-large {
+  display: block;
+  width: 100%;
+  height: min(340px, 60vw);
+  margin: 14px 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--canvas);
+}
+.closeup-detail-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.closeup-detail-heading strong {
+  color: #d75a53;
+  font-size: 14px;
+  font-weight: 500;
+}
+.closeup-detail-choices {
+  display: flex;
+  gap: 5px;
+}
+.closeup-detail-choices button {
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--secondary);
+  font-size: 12px;
+}
+.closeup-detail-choices button[aria-pressed="true"] {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
 }
 .error-map-focus rect {
   fill: none;
@@ -8121,6 +8168,8 @@ footer svg {
   }
 }
 .error-map-panel {
+  display: flex;
+  flex-direction: column;
   border: 1px solid var(--border);
   border-radius: 10px;
   overflow: hidden;
@@ -8144,13 +8193,20 @@ footer svg {
 .error-map-controls input {
   accent-color: var(--accent);
 }
-.error-map-panel > svg {
+.error-map-viewport {
+  position: relative;
+  flex: 1;
+  min-height: 280px;
+}
+.error-map-viewport > svg {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
-  height: auto;
-  max-height: 320px;
+  height: 100%;
 }
 .error-map-panel > .note {
+  margin: 0;
   padding: 8px 15px 13px;
   font-size: 11px;
 }
@@ -8158,7 +8214,7 @@ footer svg {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 15px;
+  padding: 10px 15px 14px;
   font-size: 11px;
   color: var(--secondary);
 }
@@ -8181,20 +8237,38 @@ footer svg {
 .validation-summary {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px;
+  gap: 12px;
   align-content: center;
 }
 .validation-metric {
-  padding: 18px;
+  padding: 14px 16px;
+  min-height: 118px;
   background: var(--canvas);
   border: 1px solid var(--border);
   border-radius: 10px;
 }
-.validation-metric > span {
-  display: block;
+.validation-metric-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 5px;
   font-size: 12px;
   color: var(--secondary);
-  margin-bottom: 8px;
+  margin-bottom: 4px;
+}
+.validation-metric-title .chart-info-button {
+  width: 24px;
+  height: 24px;
+}
+.validation-metric-info {
+  grid-column: 1/-1;
+  margin: 0;
+  padding: 10px 12px;
+  background: var(--accent-soft);
+  border-radius: 8px;
+  color: var(--secondary);
+  font-size: 12px;
+  line-height: 1.6;
 }
 .validation-metric strong {
   font-weight: 500;
@@ -8220,17 +8294,6 @@ footer svg {
   height: 100%;
   background: #329779;
   border-radius: inherit;
-}
-.detail-captured-note,
-.detail-captured-definition {
-  margin: 8px 0 0;
-  color: var(--secondary);
-  font-size: 11px;
-  line-height: 1.6;
-}
-.detail-captured-definition summary {
-  cursor: pointer;
-  color: var(--accent);
 }
 .science-chart-title {
   display: flex;
@@ -8365,6 +8428,27 @@ footer svg {
 }
 .custom-shapes-view {
   padding-bottom: 24px;
+}
+.app.custom-shapes-theme {
+  --accent: #21805e;
+  --accent-soft: #eaf6ef;
+  --canvas: #fbfefc;
+}
+.custom-shapes-theme .play-button {
+  background: var(--accent);
+  box-shadow: 0 3px 12px #21805e20;
+}
+.custom-shapes-theme input {
+  accent-color: var(--accent);
+}
+[data-theme="dark"] .app.custom-shapes-theme {
+  --accent: #50c79b;
+  --accent-soft: #163c30;
+  --canvas: #15231e;
+}
+[data-theme="dark"] .custom-shapes-theme .primary,
+[data-theme="dark"] .custom-shapes-theme .play-button {
+  background: #247c5c;
 }
 .custom-empty {
   min-height: 390px;

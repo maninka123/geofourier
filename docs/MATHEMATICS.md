@@ -18,7 +18,7 @@ N is a **per-contour** budget. The longest ring uses the selected sample count; 
 
 ## Similarity
 
-The reference is the selected, sampled geometry. The entire reconstructed outline is measured, independently of how much has been drawn.
+The reference is the original projected boundary from the selected map dataset (or imported shape), before uniform arc-length resampling for the FFT. Studio, Compare, components, searches and sensitivity checks all use this one scoring basis. The entire reconstructed outline is measured, independently of how much has been drawn. Old sampled-reference curve caches are versioned out.
 
 1. **Overlap:** silhouettes are scan-converted onto a common 192 × 192 grid. A shared symmetric raster extent contains both the normalized reference and reconstruction, expanding when necessary to avoid clipping overshoots. Interior rings use even–odd filling within their polygon; independent polygons are unioned. `IoU = 100 × intersection / union`.
 2. **Boundary distance:** approximately 768 arc-length samples are distributed by contour perimeter, with a minimum of eight per ring. A k-d tree measures nearest-point distances in both directions. Their mean is `d`; the reference bounding-box diagonal is `D`. `Boundary score = 100 × exp(−20d / D)`.
@@ -56,11 +56,11 @@ PNG and WebM use the Canvas renderer, with stroke widths scaled independently of
 
 ## Validation and individual components
 
-The Studio validation panel uses the selected final N, independently of the current animation construction level. Its sampled score uses the uniform arc-length FFT input. Its dataset score compares the reconstruction with the original projected map rings, using the same approximate raster overlap and bidirectional boundary scoring. Neither is a geodesic or real-coastline accuracy estimate.
+The Studio validation panel uses the selected final N, independently of the current animation construction level. Boundary similarity compares the reconstruction with the original projected map rings, using the same approximate raster overlap and bidirectional boundary scoring as the rest of the app. Sampling remains an input to the Fourier calculation, rather than a second displayed similarity score. These are not geodesic or real-coastline accuracy estimates.
 
 The heatmap measures reconstructed vertices against the closest original boundary segments. Maximum-deviation markers also check the reverse direction using up to 1,024 uniform samples per reference contour. Values are percentages of the projected country diagonal. These sampled maximum deviations are not an exact continuous Hausdorff distance.
 
-The convergence plots show sampled mean boundary error and retained nonconstant Fourier energy. Translation coefficients are excluded from energy. The small-gains indicator reports average error reduction per ten terms over the last three plotted levels through the selected N; fluctuations can occur. Sampling sensitivity repeats the same N at 256, 512, 1,024 and 2,048 longest-contour samples against the same dataset reference. Each contour can use only as many terms as it has coefficients.
+The convergence plots show mean error against the original boundary and retained nonconstant Fourier energy. Translation coefficients are excluded from energy. The small-gains indicator reports average error reduction per ten terms over the last three plotted levels through the selected N; fluctuations can occur. Sampling sensitivity repeats the same N at 256, 512, 1,024 and 2,048 longest-contour samples against the same dataset reference. Each contour can use only as many terms as it has coefficients.
 
 The Components popup lists exterior land areas and associates their interior holes with them. Component similarity is scored in a local frame so small islands remain visible to the raster calculation; mean and maximum distances are converted back to percentages of the whole-country diagonal. Source-provided names are preserved for custom shapes. Country land areas use Natural Earth's 1:10m physical island labels where an 18×18 spatial check finds at least 90% coverage in both directions, with compatible bounding-box areas. This conservative label join does not change the reconstruction geometry; unmatched or partial islands retain neutral labels. `npm run data:names` rebuilds the 234 bundled labels (across both resolutions); the source URL and SHA-256 are recorded in `land-area-names.json`.
 

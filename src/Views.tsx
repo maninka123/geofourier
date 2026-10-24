@@ -67,7 +67,7 @@ export function DifficultyLab({
   clock: React.RefObject<Clock>;
   dark: boolean;
 }) {
-  const cacheKey = `forma-lab-v3-${Object.values(config).slice(1).join("-")}-${settings.cap}-${settings.step}`,
+  const cacheKey = `forma-lab-v4-${Object.values(config).slice(1).join("-")}-${settings.cap}-${settings.step}`,
     [rows, setRows] = useState<Row[]>([]),
     [country, setCountry] = useState(config.country),
     [followCalculation, setFollowCalculation] = useState(true),

@@ -16,7 +16,7 @@ export default function StudioAccuracy({
   country?: Country;
   current: number;
 }) {
-  const key = `forma-studio-curve-v2-${Object.values(config).join("-")}-${settings.cap}-${settings.step}`;
+  const key = `forma-studio-curve-v3-${Object.values(config).join("-")}-${settings.cap}-${settings.step}`;
   const [data, setData] = useState<{ key: string; points: CurvePoint[] }>(),
     [running, setRunning] = useState(false),
     [error, setError] = useState("");
@@ -36,7 +36,7 @@ export default function StudioAccuracy({
     }
     let seed: CurvePoint[] = [];
     try {
-      const labKey = `forma-lab-v3-${config.resolution}-${config.samples}-${config.mode}-${settings.cap}-${settings.step}`;
+      const labKey = `forma-lab-v4-${config.resolution}-${config.samples}-${config.mode}-${settings.cap}-${settings.step}`;
       const labRows = JSON.parse(localStorage.getItem(labKey) || "[]");
       seed =
         labRows.find(
