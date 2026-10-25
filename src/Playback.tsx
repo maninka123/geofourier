@@ -105,6 +105,9 @@ export default function Playback({
                 {PLAYBACK_SPEEDS.map((value, i) => (
                   <button
                     key={value}
+                    style={{
+                      left: `${(i / (PLAYBACK_SPEEDS.length - 1)) * 100}%`,
+                    }}
                     aria-label={`Set playback speed to ${value} times`}
                     aria-pressed={i === speedIndex}
                     onClick={() => onSpeed(value)}

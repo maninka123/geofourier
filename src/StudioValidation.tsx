@@ -6,6 +6,7 @@ import { nearestOnBoundary } from "./validation";
 import ScienceChart from "./ScienceChart";
 import BoundaryCloseup, { type BoundaryPatch } from "./BoundaryCloseup";
 import Modal from "./Modal";
+import BoundaryGaps from "./BoundaryGaps";
 import type { Point } from "./engine";
 const metricNotes = [
   "How closely the reconstruction matches the original map boundary. Higher is closer.",
@@ -415,6 +416,7 @@ function StudioValidation({
                   {metricNotes[metricInfo]}
                 </p>
               )}
+              <BoundaryGaps errors={report.errors} />
               <p className="validation-context">
                 <ScanLine size={15} /> Original map reference · approximate
                 scores

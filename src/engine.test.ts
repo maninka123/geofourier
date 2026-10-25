@@ -6,6 +6,19 @@ import { rankTermsFor99 } from "./rankingData";
 import { compareColors } from "./compareColors";
 import { termAxisPosition, termAxisTicks } from "./chartScale";
 import { PLAYBACK_SPEEDS, nearestPlaybackSpeed } from "./playbackSpeed";
+import { boundaryDistance } from "./boundaryDistance";
+import { difficultyScore } from "./difficulty";
+import {
+  formatCalculationTime,
+  compareCalculationTimes,
+  normalizeTimedResult,
+} from "./calculationTime";
+import { errorDistribution } from "./errorDistribution";
+import {
+  readAnalysisCache,
+  writeAnalysisCache,
+  clearAnalysisCache,
+} from "./analysisCache";
 import { parseCSV, parseGeoJSON, ringsToBoundary } from "./customBoundary";
 import {
   retainedEnergy,
@@ -28,6 +41,205 @@ import {
 } from "./engine";
 const geometry = (id: string) =>
   JSON.parse(fs.readFileSync(`public/data/50m-${id}.json`, "utf8")) as Geometry;
+
+test("closest-edge indexing agrees with an exhaustive segment check, including closing edges", () => {
+  const ring: Point[] = Array.from({ length: 160 }, (_, i) => {
+    const t = (i / 160) * Math.PI * 2,
+      r = 1 + 0.2 * Math.sin(7 * t);
+    return [r * Math.cos(t), r * Math.sin(t)];
+  });
+  for (let i = 0; i < 100; i++) {
+    const p: Point = [2 * Math.sin(i * 1.7), 2 * Math.cos(i * 0.43)];
+    assert.ok(
+      Math.abs(
+        boundaryDistance(p, ring) - nearestOnBoundary(p, ring).distance,
+      ) < 1e-10,
+    );
+  }
+  assert.equal(
+    boundaryDistance(
+      [0, 0.5],
+      [
+        [0, 0],
+        [1, 0],
+        [1, 1],
+        [0, 1],
+      ],
+    ),
+    0,
+  );
+});
+
+test("identical edges score perfectly despite different vertex spacing and start points", () => {
+  const m = prepare(
+    {
+      type: "Polygon",
+      coordinateSystem: "cartesian",
+      coordinates: [
+        [
+          [0, 0],
+          [2, 0],
+          [2, 1],
+          [0, 1],
+          [0, 0],
+        ],
+      ],
+    },
+    256,
+  );
+  const c = m.contours[0],
+    reference = c.source!;
+  const midpoint: Point = [
+    (reference[0][0] + reference[1][0]) / 2,
+    (reference[0][1] + reference[1][1]) / 2,
+  ];
+  const reordered = [midpoint, ...reference.slice(1, -1), reference[0]];
+  const score = measure({ ...m, contours: [{ ...c, points: reference }] }, [
+    reordered,
+  ]);
+  assert.ok(Math.abs(score.similarity - 100) < 1e-9);
+});
+
+test("separate islands cannot hide a swapped reconstruction behind another island", () => {
+  const m = prepare(
+    {
+      type: "MultiPolygon",
+      coordinateSystem: "cartesian",
+      coordinates: [
+        [
+          [
+            [0, 0],
+            [1, 0],
+            [1, 1],
+            [0, 1],
+            [0, 0],
+          ],
+        ],
+        [
+          [
+            [3, 0],
+            [4, 0],
+            [4, 1],
+            [3, 1],
+            [3, 0],
+          ],
+        ],
+      ],
+    },
+    256,
+    "exterior",
+  );
+  const reference = {
+    ...m,
+    contours: m.contours.map((c) => ({ ...c, points: c.source! })),
+  };
+  const metrics = measure(
+    reference,
+    reference.contours.map((c) => c.points).reverse(),
+  );
+  assert.equal(metrics.iou, 100);
+  assert.ok(metrics.boundary < 1);
+});
+
+test("minimum samples on tiny islands do not dilute the main boundary error", () => {
+  const m = prepare(geometry("LKA"), 256),
+    c = m.contours[0];
+  const reference = { ...m, contours: [{ ...c, points: c.source! }] };
+  const shifted: Point[] = c.source!.map((p) => [p[0] + 0.05, p[1]]);
+  const baseline = measure(reference, [shifted]);
+  const tiny = Array.from({ length: 100 }, (_, i) => ({
+    ...c,
+    group: i + 1,
+    perimeter: c.perimeter * 1e-5,
+    points: c.source!.map((p) => [p[0] * 1e-5, p[1] * 1e-5] as Point),
+  }));
+  const combined = measure(
+    { ...reference, contours: [...reference.contours, ...tiny] },
+    [shifted, ...tiny.map((c) => c.points)],
+  );
+  assert.ok(combined.mean > baseline.mean * 0.97);
+  assert.ok(combined.mean < baseline.mean * 1.01);
+});
+
+test("difficulty is independent of ring order and partial scans are not censored as complete", () => {
+  const m = prepare(geometry("JPN"), 256, "exterior");
+  const curve = [{ terms: 128, similarity: 95, iou: 95, mean: 0.1 }];
+  const a = difficultyScore(m, curve, 256, true, 0),
+    b = difficultyScore(
+      { ...m, contours: [...m.contours].reverse() },
+      curve,
+      256,
+      true,
+      0,
+    );
+  assert.ok(Math.abs(a.difficulty! - b.difficulty!) < 1e-10);
+  assert.equal(difficultyScore(m, [], 256, false).difficulty, undefined);
+  assert.equal(
+    difficultyScore(m, curve, 256, false, 50, 10).difficulty,
+    undefined,
+  );
+  assert.ok(
+    difficultyScore(m, [{ ...curve[0], similarity: 90 }], 256, true, 0)
+      .difficulty! >= 70,
+  );
+  assert.ok(Math.abs(a.difficulty! - (35 + 20 * a.entropy)) < 1e-10);
+  const timed = difficultyScore(m, curve, 256, true, 50, 10);
+  assert.equal(timed.timeDemand, 5);
+  assert.ok(Math.abs(timed.difficulty! - a.difficulty! - 5) < 1e-10);
+  assert.equal(difficultyScore(m, curve, 256, true, 100, 20).timeDemand, 5);
+  assert.equal(difficultyScore(m, curve, 256, true, 999999, 10).timeDemand, 10);
+});
+
+test("India and China reach 99 percent under original-edge scoring at the standard budget", () => {
+  for (const id of ["IND", "CHN"])
+    for (const mode of ["main", "exterior", "full"]) {
+      assert.ok(
+        analyze(prepare(geometry(id), 1024, mode), 500).metrics.similarity >=
+          99,
+        `${id} ${mode}`,
+      );
+    }
+});
+
+test("the gap histogram accounts for every valid sample, including the top endpoint", () => {
+  const d = errorDistribution([0, 0.01, 0.02, 0.2, NaN, Infinity, -1]);
+  assert.equal(d.total, 4);
+  assert.equal(
+    d.bins.reduce((n, b) => n + b.count, 0),
+    4,
+  );
+  assert.ok(Math.abs(d.bins.reduce((n, b) => n + b.percent, 0) - 100) < 1e-9);
+  assert.equal(d.p90, 0.2);
+  assert.equal(errorDistribution([0, 0, 0]).bins[0].count, 3);
+  assert.equal(errorDistribution([]).total, 0);
+});
+
+test("cache quota failures retain successive calculation results in this session", async () => {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, "indexedDB");
+  Object.defineProperty(globalThis, "indexedDB", {
+    configurable: true,
+    value: {
+      open() {
+        throw new DOMException("Full", "QuotaExceededError");
+      },
+    },
+  });
+  try {
+    for (let n = 1; n <= 4; n++) {
+      const rows = Array.from({ length: n }, (_, i) => ({
+        id: `country-${i}`,
+        similarity: 99 + i / 1000,
+      }));
+      assert.equal(await writeAnalysisCache("quota-test", rows), false);
+      assert.deepEqual(await readAnalysisCache("quota-test"), rows);
+    }
+    await clearAnalysisCache();
+    assert.equal(await readAnalysisCache("quota-test"), undefined);
+  } finally {
+    if (descriptor) Object.defineProperty(globalThis, "indexedDB", descriptor);
+    else Reflect.deleteProperty(globalThis, "indexedDB");
+  }
+});
 
 test("playback speed snaps to slow options and two-times steps through eight", () => {
   assert.deepEqual(PLAYBACK_SPEEDS.slice(2), [2, 4, 6, 8]);
@@ -608,4 +820,28 @@ test("construction handles N smaller than the requested number of levels", () =>
   assert.deepEqual(constructionSequence(1, 8), [1]);
   assert.deepEqual(constructionSequence(3, 8), [1, 2, 3]);
   assert.equal(constructionAt(150, 8, true, 10, 10, false).terms, 1);
+});
+
+test("missing or corrupt timing stays unranked and sorts after measured results", () => {
+  const m = prepare(geometry("JPN"), 64);
+  const curve = [{ terms: 32, similarity: 95, iou: 95, mean: 0.1 }];
+  for (const missing of [undefined, NaN, Infinity, -1]) {
+    assert.equal(formatCalculationTime(missing), "\u2014");
+    assert.equal(
+      difficultyScore(m, curve, 64, true, missing).difficulty,
+      undefined,
+    );
+    assert.equal(compareCalculationTimes(missing, 100), 1);
+    assert.equal(compareCalculationTimes(missing, 100, true), 1);
+  }
+  assert.equal(formatCalculationTime(0), "0.00s");
+  assert.equal(formatCalculationTime(1250), "1.25s");
+  assert.equal(compareCalculationTimes(50, 100, true), 50);
+  const old = { id: "IND", curve, complete: true, difficulty: 12 };
+  const normalized = normalizeTimedResult(old);
+  assert.equal(normalized.complete, false);
+  assert.equal(normalized.difficulty, undefined);
+  assert.equal(normalized.curve, curve);
+  const valid = { ...old, calculationMs: 50, timeDemand: 5 };
+  assert.equal(normalizeTimedResult(valid), valid);
 });

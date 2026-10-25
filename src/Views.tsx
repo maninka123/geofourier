@@ -31,12 +31,26 @@ import CompareAccuracy from "./CompareAccuracy";
 import { compareColors } from "./compareColors";
 import { csv, download } from "./exports";
 import Components from "./Components";
+import {
+  labCachePrefix,
+  readAnalysisCache,
+  writeAnalysisCache,
+} from "./analysisCache";
+import { difficultyScore } from "./difficulty";
+import {
+  hasCalculationTime,
+  formatCalculationTime,
+  compareCalculationTimes,
+  normalizeTimedResult,
+} from "./calculationTime";
 type Row = {
   id: string;
   curve: CurvePoint[];
   best: number;
-  difficulty: number;
+  difficulty?: number;
   entropy: number;
+  timeDemand?: number;
+  calculationMs?: number;
   components: number;
   elapsed: number;
   complete: boolean;
@@ -67,7 +81,7 @@ export function DifficultyLab({
   clock: React.RefObject<Clock>;
   dark: boolean;
 }) {
-  const cacheKey = `forma-lab-v4-${Object.values(config).slice(1).join("-")}-${settings.cap}-${settings.step}`,
+  const cacheKey = `${labCachePrefix}${Object.values(config).slice(1).join("-")}-${settings.cap}-${settings.step}`,
     [rows, setRows] = useState<Row[]>([]),
     [country, setCountry] = useState(config.country),
     [followCalculation, setFollowCalculation] = useState(true),
@@ -75,7 +89,8 @@ export function DifficultyLab({
     [sort, setSort] = useState("difficulty"),
     [running, setRunning] = useState(false),
     [status, setStatus] = useState(""),
-    [error, setError] = useState("");
+    [error, setError] = useState(""),
+    [cacheNotice, setCacheNotice] = useState("");
   const [batch, setBatch] = useState<string[]>([]),
     [batchDone, setBatchDone] = useState<string[]>([]),
     [activeCountry, setActiveCountry] = useState(""),
@@ -120,12 +135,20 @@ export function DifficultyLab({
   const modelConfig = { ...config, country },
     preview = useAnalysis(modelConfig, terms);
   useEffect(() => {
-    try {
-      setRows(JSON.parse(localStorage.getItem(cacheKey) || "[]"));
-    } catch {
-      setRows([]);
-    }
+    let active = true;
+    const version = runVersion.current;
+    setRows([]);
+    setRunning(false);
+    setActiveCountry("");
+    setStatus("");
+    setBatch([]);
+    setCacheNotice("");
+    void readAnalysisCache<Row[]>(cacheKey).then((saved) => {
+      if (active && version === runVersion.current && Array.isArray(saved))
+        setRows(saved.map(normalizeTimedResult));
+    });
     return () => {
+      active = false;
       runVersion.current++;
       cancel.current = true;
       job.current?.cancel();
@@ -135,7 +158,9 @@ export function DifficultyLab({
     const v = ++runVersion.current;
     cancel.current = false;
     setBatch(includeExisting ? datasetCountries.map((c) => c.id) : ids);
-    setBatchDone(includeExisting ? rows.map((r) => r.id) : []);
+    setBatchDone(
+      includeExisting ? rows.filter((r) => r.complete).map((r) => r.id) : [],
+    );
     setRunning(true);
     setFollowCalculation(true);
     setError("");
@@ -160,7 +185,7 @@ export function DifficultyLab({
           101,
           Math.min(settings.cap, settings.samples),
           settings.step,
-          settings.maxTime * 1000,
+          settings.maxTime ? settings.maxTime * 1000 : Infinity,
           (p) => {
             if (cancel.current || v !== runVersion.current) return;
             liveCurve.push(p.point);
@@ -181,35 +206,42 @@ export function DifficultyLab({
         );
         const result = await job.current.promise;
         if (cancel.current || v !== runVersion.current) break;
-        const energies = analyzed.model.contours[0].coefficients
-            .filter((c) => c.frequency !== 0)
-            .map((c) => c.amplitude ** 2),
-          total = energies.reduce((s, v) => s + v, 0),
-          entropy =
-            -energies.reduce((s, v) => {
-              const p = v / total;
-              return s + (p > 0 ? p * Math.log(p) : 0);
-            }, 0) / Math.log(energies.length || 2),
-          t95 = first(result.curve, 95),
-          difficulty =
-            80 * Math.min(1, (t95 ?? settings.cap) / settings.cap) +
-            20 * entropy;
+        const cap = Math.min(settings.cap, settings.samples);
+        const complete =
+          result.reason === "budget" &&
+          hasCalculationTime(result.calculationMs);
+        const { entropy, difficulty, timeDemand } = difficultyScore(
+          analyzed.model,
+          result.curve,
+          cap,
+          complete,
+          result.calculationMs,
+          result.evaluations,
+        );
         const row: Row = {
           id,
           curve: result.curve,
           best: result.best.similarity,
           difficulty,
           entropy,
+          timeDemand,
+          calculationMs: hasCalculationTime(result.calculationMs)
+            ? result.calculationMs
+            : undefined,
           components: analyzed.model.components,
           elapsed: result.elapsed,
-          complete: result.reason === "budget",
-          cap: settings.cap,
+          complete,
+          cap,
           step: settings.step,
         };
         current = [...current.filter((r) => r.id !== id), row];
         setRows(current);
         setBatchDone((done) => [...done.filter((key) => key !== id), id]);
-        localStorage.setItem(cacheKey, JSON.stringify(current));
+        const saved = await writeAnalysisCache(cacheKey, current);
+        if (!saved && v === runVersion.current)
+          setCacheNotice(
+            "Results are kept for this session. Export analysis to save a copy.",
+          );
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -233,11 +265,20 @@ export function DifficultyLab({
             return a.country.name.localeCompare(b.country.name);
           if (!a.row) return 1;
           if (!b.row) return -1;
-          if (sort === "time") return a.row.elapsed - b.row.elapsed;
-          if (sort === "time-desc") return b.row.elapsed - a.row.elapsed;
+          if (sort === "time")
+            return compareCalculationTimes(
+              a.row.calculationMs,
+              b.row.calculationMs,
+            );
+          if (sort === "time-desc")
+            return compareCalculationTimes(
+              a.row.calculationMs,
+              b.row.calculationMs,
+              true,
+            );
           return sort === "accuracy"
             ? b.row.best - a.row.best
-            : b.row.difficulty - a.row.difficulty;
+            : (b.row.difficulty ?? -Infinity) - (a.row.difficulty ?? -Infinity);
         }),
     [rows, datasetCountries, filter, sort],
   );
@@ -250,9 +291,11 @@ export function DifficultyLab({
     limit = Math.min(settings.cap, settings.samples),
     displayId = showingLive ? activeCountry : country,
     displayCountry = datasetCountries.find((c) => c.id === displayId);
-  const scoredCountry = rows.find((r) => r.id === displayId);
+  const scoredCountry = rows.find(
+    (r) => r.id === displayId && r.difficulty !== undefined,
+  );
   const termDemand = scoredCountry
-    ? 80 *
+    ? 70 *
       Math.min(
         1,
         (first(scoredCountry.curve, 95) ?? scoredCountry.cap) /
@@ -260,6 +303,7 @@ export function DifficultyLab({
       )
     : 0;
   const borderDetail = scoredCountry ? 20 * scoredCountry.entropy : 0;
+  const timeDemand = scoredCountry?.timeDemand || 0;
   const previewAspect = useMemo(() => {
     let xmin = Infinity,
       xmax = -Infinity,
@@ -295,7 +339,10 @@ export function DifficultyLab({
       );
   };
   const remaining = useMemo(
-    () => datasetCountries.filter((c) => !rows.some((r) => r.id === c.id)),
+    () =>
+      datasetCountries.filter(
+        (c) => !rows.some((r) => r.id === c.id && r.complete),
+      ),
     [datasetCountries, rows],
   );
   const countryPreview = (
@@ -490,6 +537,11 @@ export function DifficultyLab({
           </button>
         </div>
       </div>
+      {cacheNotice && (
+        <p className="note" role="status">
+          {cacheNotice}
+        </p>
+      )}
       {running && batch.length > 0 && (
         <section
           className={`surface country-progress ${running ? "is-running" : ""}`}
@@ -694,7 +746,7 @@ export function DifficultyLab({
                       </button>
                     </td>
                     <td>
-                      {row ? (
+                      {row?.difficulty !== undefined ? (
                         <>
                           <span className="difficulty-number">
                             {row.difficulty.toFixed(1)}
@@ -713,8 +765,16 @@ export function DifficultyLab({
                           ? (first(row.curve, t) ?? (
                               <span
                                 className="unavailable"
-                                title={`Not reached within ${row.cap} tested terms`}
-                                aria-label={`${t} percent not reached within ${row.cap} tested terms`}
+                                title={
+                                  row.complete
+                                    ? `Not reached within ${row.cap} tested terms`
+                                    : `Partial search: tested through N = ${row.curve.at(-1)?.terms || 0}. Continue calculation to test the remaining terms.`
+                                }
+                                aria-label={
+                                  row.complete
+                                    ? `${t} percent not reached within ${row.cap} tested terms`
+                                    : `${t} percent not reached in this partial search`
+                                }
                               >
                                 —
                               </span>
@@ -723,36 +783,38 @@ export function DifficultyLab({
                       </td>
                     ))}
                     <td>{row ? `${row.best.toFixed(2)}%` : "—"}</td>
-                    <td title="Measured curve search time on this device; includes scoring and scheduling, excludes data loading.">
-                      {row ? `${(row.elapsed / 1000).toFixed(2)}s` : "—"}
+                    <td title="Calculation work on this device, excluding pauses, data loading and UI scheduling. Its average cost per N contributes up to 10 difficulty points.">
+                      {formatCalculationTime(row?.calculationMs)}
                     </td>
                     {config.mode !== "main" && (
                       <td>{row ? row.components : "—"}</td>
                     )}
                     <td>
                       <button
-                        className={`country-calculation-status ${row ? "is-complete" : "is-pending"}`}
+                        className={`country-calculation-status ${row?.complete ? "is-complete" : "is-pending"}`}
                         aria-label={
-                          row
+                          row?.complete
                             ? `${c.name} calculated`
                             : activeCountry === c.id && running
                               ? `Calculating ${c.name}`
                               : `Calculate ${c.name}`
                         }
                         title={
-                          row
+                          row?.complete
                             ? "Calculated"
                             : activeCountry === c.id && running
                               ? "Calculating"
-                              : "Pending · click to calculate"
+                              : row
+                                ? `Partial · tested through N = ${row.curve.at(-1)?.terms || 0}. Click to continue.`
+                                : "Pending · click to calculate"
                         }
-                        disabled={running || Boolean(row)}
+                        disabled={running || Boolean(row?.complete)}
                         onClick={() => {
                           setCountry(c.id);
                           compute([c.id]);
                         }}
                       >
-                        {row ? (
+                        {row?.complete ? (
                           <Check size={17} />
                         ) : running && activeCountry === c.id ? (
                           <LoaderCircle size={17} className="spin" />
@@ -767,10 +829,13 @@ export function DifficultyLab({
             </table>
           </div>
           <div className="table-foot">
-            {rows.length} analyzed ·{" "}
-            {settings.resolution === "50m" ? "1:50 million" : "1:110 million"} ·{" "}
-            {settings.samples} samples for longest contour · {settings.cap}-term
-            cap · step {settings.step}
+            {rows.filter((r) => r.complete).length} complete
+            {rows.some((r) => !r.complete)
+              ? ` · ${rows.filter((r) => !r.complete).length} partial`
+              : ""}{" "}
+            · {settings.resolution === "50m" ? "1:50 million" : "1:110 million"}{" "}
+            · {settings.samples} samples for longest contour · {settings.cap}
+            -term cap · step {settings.step}
           </div>
         </div>
         {!showingLive && countryPreview}
@@ -785,26 +850,33 @@ export function DifficultyLab({
             <h3>Difficulty, with the workings shown.</h3>
             <div
               className="difficulty-formula"
-              aria-label="Score equals 80 times the smaller of terms for 95 percent divided by the term cap or one, plus 20 times normalized spectral energy entropy"
+              aria-label="Difficulty combines up to 70 points for term demand, 20 for border detail and 10 for calculation time"
             >
               <span>
-                80 × min(N<sub>95</sub> / N<sub>cap</sub>, 1)
+                70 × min(N<sub>95</sub> / N<sub>cap</sub>, 1)
               </span>
               <b>+</b>
               <span>20 × entropy</span>
+              <b>+</b>
+              <span>time (0–10)</span>
             </div>
             <p>
-              <strong>Term demand (0–80)</strong> measures how many terms reach
+              <strong>Term demand (0–70)</strong> measures how many terms reach
               95% similarity.
               <strong> Border detail (0–20)</strong> measures how widely Fourier
-              energy is spread. If 95% is not reached, term demand is 80 and the
-              score is limited by the tested budget.
+              energy is spread. <strong>Calculation cost (0–10)</strong> uses
+              average calculation time per tested N on this device, reaching 10
+              at 10 ms per N. UI pauses are excluded. If 95% is not reached,
+              term demand is 70 and the score is limited by a completed term
+              budget. Partial searches remain unranked until enough terms have
+              been tested.
             </p>
             <p>
               Thresholds use the first qualifying N on the tested grid.
               Countries share the same dataset, sampling, and budget. Country
               area is not part of the score; separate land areas are counted
-              independently.
+              independently. Changing geometry changes the reference, so scores
+              can rise or fall when islands or holes are included.
             </p>
           </div>
           <aside
@@ -816,7 +888,7 @@ export function DifficultyLab({
               <Flag country={displayCountry} />
               <span>{displayCountry?.name || displayId}</span>
               <strong>
-                {scoredCountry ? scoredCountry.difficulty.toFixed(2) : "—"}
+                {scoredCountry?.difficulty?.toFixed(2) ?? "—"}
                 <small> / 100</small>
               </strong>
             </div>
@@ -826,10 +898,10 @@ export function DifficultyLab({
                   <span>Term demand</span>
                   <b>
                     {termDemand.toFixed(2)}
-                    <small> / 80</small>
+                    <small> / 70</small>
                   </b>
                   <div className="score-component-track">
-                    <i style={{ width: `${(termDemand / 80) * 100}%` }} />
+                    <i style={{ width: `${(termDemand / 70) * 100}%` }} />
                   </div>
                 </div>
                 <div className="score-component border-detail">
@@ -842,10 +914,21 @@ export function DifficultyLab({
                     <i style={{ width: `${(borderDetail / 20) * 100}%` }} />
                   </div>
                 </div>
+                <div className="score-component calculation-detail">
+                  <span>Calculation cost</span>
+                  <b>
+                    {timeDemand.toFixed(2)}
+                    <small> / 10</small>
+                  </b>
+                  <div className="score-component-track">
+                    <i style={{ width: `${timeDemand * 10}%` }} />
+                  </div>
+                </div>
                 <div className="score-addition">
                   <span>{termDemand.toFixed(2)}</span> +{" "}
-                  <span>{borderDetail.toFixed(2)}</span> ={" "}
-                  <strong>{scoredCountry.difficulty.toFixed(2)}</strong>
+                  <span>{borderDetail.toFixed(2)}</span> +{" "}
+                  <span>{timeDemand.toFixed(2)}</span> ={" "}
+                  <strong>{scoredCountry.difficulty?.toFixed(2)}</strong>
                 </div>
               </>
             ) : (
@@ -1047,7 +1130,7 @@ export function CompareView({
           target,
           Math.min(settings.cap, settings.samples),
           settings.step,
-          settings.maxTime * 1000,
+          settings.maxTime ? settings.maxTime * 1000 : Infinity,
           (p) => {
             if (v === version.current)
               setStatus(
@@ -1148,29 +1231,24 @@ export function CompareView({
             Find required terms
           </button>
         ) : (
-          <div className="term-sharing segmented" aria-label="Term count mode">
-            <button
-              className={!independent ? "active" : ""}
-              aria-pressed={!independent}
-              onClick={() => setIndependent(false)}
-            >
-              Shared N
-            </button>
-            <button
-              className={independent ? "active" : ""}
-              aria-pressed={independent}
-              onClick={() => {
+          <label className="term-sharing">
+            <input
+              type="checkbox"
+              role="switch"
+              aria-label="Independent term counts"
+              checked={independent}
+              onChange={(event) => {
                 setOwnTerms(
                   Object.fromEntries(
                     ids.map((id) => [id, ownTerms[id] ?? terms]),
                   ),
                 );
-                setIndependent(true);
+                setIndependent(event.target.checked);
               }}
-            >
-              Per country
-            </button>
-          </div>
+            />
+            <span className="term-sharing-switch" aria-hidden="true" />
+            <span>Individual terms</span>
+          </label>
         )}
       </div>
       <div className="compare-playback-bar">

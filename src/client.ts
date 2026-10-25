@@ -120,3 +120,13 @@ export function runSearch(
     progress,
   );
 }
+
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    worker?.terminate();
+    worker = undefined;
+    for (const cb of callbacks.values())
+      cb.reject(new Error("Calculations updated. Please try again."));
+    callbacks.clear();
+  });
+}

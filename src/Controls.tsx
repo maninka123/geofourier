@@ -150,7 +150,7 @@ export const defaults: Settings = {
   mode: "main",
   cap: 500,
   step: 5,
-  maxTime: 30,
+  maxTime: 0,
   progressive: false,
   fps: 60,
 };
@@ -629,16 +629,16 @@ export default function Controls({
               </select>
             </label>
             <label className="select-label">
-              Time budget
+              Calculation time limit
               <select
                 value={settings.maxTime}
                 onChange={(e) =>
                   onSettings({ ...settings, maxTime: Number(e.target.value) })
                 }
               >
-                {[5, 15, 30, 60].map((n) => (
+                {[0, 30, 60, 120].map((n) => (
                   <option key={n} value={n}>
-                    {n} seconds
+                    {n ? `${n} seconds` : "No limit · stop any time"}
                   </option>
                 ))}
               </select>

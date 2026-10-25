@@ -51,7 +51,7 @@ export default function CompareAccuracy({
               101,
               Math.min(settings.cap, settings.samples),
               settings.step,
-              settings.maxTime * 1000,
+              settings.maxTime ? settings.maxTime * 1000 : Infinity,
               (p) => {
                 if (v !== version.current) return;
                 points.push(p.point);
@@ -69,6 +69,10 @@ export default function CompareAccuracy({
                 cache.current.set(countryKey(id), result.curve);
                 if (cache.current.size > 32)
                   cache.current.delete(cache.current.keys().next().value!);
+              } else if (result.reason === "time") {
+                setError(
+                  `Partial curve for ${countries.find((c) => c.id === id)?.name || id}: time limit reached at N = ${result.curve.at(-1)?.terms || 0}. Increase calculation time in Advanced to finish.`,
+                );
               }
               setData({ key, curves: { ...curves } });
             }

@@ -1,3 +1,4 @@
+import { boundaryDistance } from "./boundaryDistance";
 export type Point = [number, number];
 export type Geometry = {
   type: "Polygon" | "MultiPolygon";
@@ -63,6 +64,7 @@ export type SearchResult = {
   best: CurvePoint;
   reached: boolean;
   elapsed: number;
+  calculationMs: number;
   evaluations: number;
   reason: "target" | "budget" | "time" | "cancelled";
   granularity: number;
@@ -307,29 +309,6 @@ export function raster(
     }
   return mask;
 }
-type KD = { point: Point; axis: number; left?: KD; right?: KD };
-function tree(points: Point[], depth = 0): KD | undefined {
-  if (!points.length) return;
-  const axis = depth % 2;
-  points.sort((a, b) => a[axis] - b[axis]);
-  const m = points.length >> 1;
-  return {
-    point: points[m],
-    axis,
-    left: tree(points.slice(0, m), depth + 1),
-    right: tree(points.slice(m + 1), depth + 1),
-  };
-}
-function nearest(node: KD | undefined, p: Point, best = Infinity): number {
-  if (!node) return best;
-  const d = (p[0] - node.point[0]) ** 2 + (p[1] - node.point[1]) ** 2;
-  best = Math.min(best, d);
-  const delta = p[node.axis] - node.point[node.axis];
-  best = nearest(delta < 0 ? node.left : node.right, p, best);
-  if (delta * delta < best)
-    best = nearest(delta < 0 ? node.right : node.left, p, best);
-  return best;
-}
 export function measure(model: Model, paths: Point[][]): Metrics {
   const source = model.contours.map((c) => c.points);
   let extent = 1.2;
@@ -345,24 +324,35 @@ export function measure(model: Model, paths: Point[][]): Metrics {
     union += a[i] | b[i];
   }
   const total = model.contours.reduce((s, c) => s + c.perimeter, 0);
-  const samples = (ps: Point[][]) =>
-    ps.flatMap((p, i) =>
-      resample(
-        p,
-        Math.max(8, Math.ceil((768 * model.contours[i].perimeter) / total)),
+  const perContour = source.map((reference, i) => {
+    const count = Math.max(
+      8,
+      Math.ceil((768 * model.contours[i].perimeter) / total),
+    );
+    // Match each ring with its own reconstruction, including holes and islands.
+    const errors = [
+      ...resample(reference, count).map((p) => boundaryDistance(p, paths[i])),
+      ...resample(paths[i], count).map((p) => boundaryDistance(p, reference)),
+    ];
+    return { errors, weight: model.contours[i].perimeter / total };
+  });
+  // A minimum sample count must not give a tiny island the weight of a mainland.
+  const mean = perContour.reduce(
+      (sum, c) =>
+        sum +
+        (c.weight * c.errors.reduce((s, d) => s + d, 0)) / c.errors.length,
+      0,
+    ),
+    max = Math.max(...perContour.flatMap((c) => c.errors)),
+    rms = Math.sqrt(
+      perContour.reduce(
+        (sum, c) =>
+          sum +
+          (c.weight * c.errors.reduce((s, d) => s + d * d, 0)) /
+            c.errors.length,
+        0,
       ),
     );
-  const pa = samples(source),
-    pb = samples(paths),
-    ta = tree([...pa]),
-    tb = tree([...pb]);
-  const errors = [
-    ...pa.map((p) => Math.sqrt(nearest(tb, p))),
-    ...pb.map((p) => Math.sqrt(nearest(ta, p))),
-  ];
-  const mean = errors.reduce((s, d) => s + d, 0) / errors.length,
-    max = Math.max(...errors),
-    rms = Math.sqrt(errors.reduce((s, d) => s + d * d, 0) / errors.length);
   const iou = union ? (intersection / union) * 100 : 0,
     boundary = 100 * Math.exp((-20 * mean) / model.diagonal);
   return {
@@ -408,7 +398,8 @@ export async function search(
   const start = performance.now(),
     curve: CurvePoint[] = [];
   let best: CurvePoint = { terms: 1, similarity: -1, iou: 0, mean: 0 },
-    reason: SearchResult["reason"] = "budget";
+    reason: SearchResult["reason"] = "budget",
+    calculationMs = 0;
   const counts = new Set<number>([limit]);
   for (let n = 1; n <= limit; n += step) counts.add(n);
   if (denseEarly) for (let n = 1; n <= Math.min(25, limit); n++) counts.add(n);
@@ -429,6 +420,7 @@ export async function search(
         mean: a.metrics.mean,
       };
     curve.push(point);
+    calculationMs += a.elapsedMs || 0;
     if (point.similarity > best.similarity) best = point;
     onPoint(point, best, curve.length, performance.now() - start, a);
     if (point.similarity >= target) {
@@ -442,6 +434,7 @@ export async function search(
     best,
     reached: reason === "target",
     elapsed: performance.now() - start,
+    calculationMs,
     evaluations: curve.length,
     reason,
     granularity: step,

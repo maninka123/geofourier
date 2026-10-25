@@ -72,6 +72,8 @@ import { nearestPlaybackSpeed } from "./playbackSpeed";
 import Equation from "./Equation";
 import Modal from "./Modal";
 import Components from "./Components";
+import SettingsActions from "./SettingsActions";
+import { clearAnalysisCache } from "./analysisCache";
 const StudioValidation = lazy(() => import("./StudioValidation"));
 const CustomShapes = lazy(() => import("./CustomShapes"));
 import { constructionAt, type BuildMode } from "./construction";
@@ -125,9 +127,9 @@ function readState(): Partial<Saved> {
         step: [1, 2, 5, 10, 20].includes(s.settings?.step)
           ? s.settings.step
           : 5,
-        maxTime: [5, 15, 30, 60].includes(s.settings?.maxTime)
+        maxTime: [0, 30, 60, 120].includes(s.settings?.maxTime)
           ? s.settings.maxTime
-          : 30,
+          : defaults.maxTime,
       },
       appearance: {
         ...defaultAppearance,
@@ -190,6 +192,8 @@ export default function App() {
     [controls, setControls] = useState(true),
     [clean, setClean] = useState(false),
     [modal, setModal] = useState(""),
+    [analysisEpoch, setAnalysisEpoch] = useState(0),
+    [clearingResults, setClearingResults] = useState(false),
     [equationAnalysis, setEquationAnalysis] = useState<Analysis>(),
     [toast, setToast] = useState(""),
     [playing, setPlaying] = useState(
@@ -216,6 +220,9 @@ export default function App() {
         return [];
       }
     });
+  useEffect(() => {
+    if (modal !== "settings") setClearingResults(false);
+  }, [modal]);
   const clock = useRef<Clock>({
       elapsed: duration * 0.62,
       playing,
@@ -369,7 +376,7 @@ export default function App() {
       target,
       Math.min(settings.cap, settings.samples),
       settings.step,
-      settings.maxTime * 1000,
+      settings.maxTime ? settings.maxTime * 1000 : Infinity,
       (p) => {
         if (v !== searchVersion.current) return;
         setProgress(p);
@@ -1163,12 +1170,15 @@ export default function App() {
                       </div>
                     </div>
                   </section>
-                  <StudioAccuracy
-                    config={config}
-                    settings={settings}
-                    country={selected}
-                    current={construction.terms}
-                  />
+                  {!clearingResults && (
+                    <StudioAccuracy
+                      key={analysisEpoch}
+                      config={config}
+                      settings={settings}
+                      country={selected}
+                      current={construction.terms}
+                    />
+                  )}
                   <Suspense
                     fallback={
                       <p className="note" role="status">
@@ -1187,21 +1197,28 @@ export default function App() {
             )}
           </>
         ) : tab === "Difficulty Lab" ? (
-          <DifficultyLab
-            countries={countries}
-            config={config}
-            settings={settings}
-            terms={terms}
-            onTerms={setTerms}
-            onOpenStudio={(id) => {
-              changeCountry(id);
-              setTab("Studio");
-              window.scrollTo({ top: 0, behavior: "instant" });
-            }}
-            appearance={appearance}
-            clock={clock}
-            dark={dark}
-          />
+          clearingResults ? (
+            <p className="note" role="status">
+              Calculated results cleared. Close Settings to continue.
+            </p>
+          ) : (
+            <DifficultyLab
+              key={analysisEpoch}
+              countries={countries}
+              config={config}
+              settings={settings}
+              terms={terms}
+              onTerms={setTerms}
+              onOpenStudio={(id) => {
+                changeCountry(id);
+                setTab("Studio");
+                window.scrollTo({ top: 0, behavior: "instant" });
+              }}
+              appearance={appearance}
+              clock={clock}
+              dark={dark}
+            />
+          )
         ) : tab === "Custom Shapes" ? (
           <Suspense
             fallback={
@@ -1212,8 +1229,13 @@ export default function App() {
           >
             <CustomShapes appearance={appearance} dark={dark} />
           </Suspense>
+        ) : clearingResults ? (
+          <p className="note" role="status">
+            Calculated results cleared. Close Settings to continue.
+          </p>
         ) : (
           <CompareView
+            key={analysisEpoch}
             countries={countries}
             config={config}
             settings={settings}
@@ -1430,20 +1452,33 @@ export default function App() {
                     />
                   </div>
                 </div>
-                <button
-                  className="button secondary full-width"
-                  onClick={() => {
+                <SettingsActions
+                  onRestore={() => {
                     setSettings(defaults);
                     setAppearance(defaultAppearance);
                     setTerms(150);
-                    setSpeed(1);
+                    setSpeed(2);
                     setDuration(20);
                     setLoops(Infinity);
                     notify("Default instrument settings restored.");
                   }}
-                >
-                  Restore defaults
-                </button>
+                  onClear={async () => {
+                    searchVersion.current++;
+                    searchJob.current?.cancel();
+                    setSearching(false);
+                    setResult(undefined);
+                    setProgress(undefined);
+                    setCurve([]);
+                    setClearingResults(true);
+                    setAnalysisEpoch((value) => value + 1);
+                    const savedCleared = await clearAnalysisCache();
+                    if (!savedCleared)
+                      throw new Error("Persistent cache unavailable");
+                    notify(
+                      "Calculated results cleared. Ready to calculate again.",
+                    );
+                  }}
+                />
               </>
             )}
             {modal === "export" && (

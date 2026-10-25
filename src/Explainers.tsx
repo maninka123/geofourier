@@ -108,10 +108,10 @@ export function SimilarityExplainer({ analysis }: { analysis?: Analysis }) {
           </p>
           <h3>Boundary score</h3>
           <p>
-            100 × exp(−20d / D). d is the bidirectional nearest-point Chamfer
-            distance from arc-length samples; D is the reference bounding-box
-            diagonal. Small islands may be below raster resolution, so boundary
-            distance complements overlap.
+            100 × exp(−20d / D). d is the bidirectional closest-edge distance
+            from arc-length samples, weighted by contour length; D is the
+            reference bounding-box diagonal. Small islands may be below raster
+            resolution, so boundary distance complements overlap.
           </p>
           <div className="metric-detail">
             <span>
