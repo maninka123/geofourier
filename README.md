@@ -1,29 +1,34 @@
 # Forma
 
-**Country borders and custom shapes, drawn with Fourier series.**
+**Country borders and custom shapes, rebuilt with Fourier series.**
 
-[Open the live app](https://maninka123.github.io/geofourier/)
+[Try Forma](https://forma-borders.pamudu.chatgpt.site) · [GitHub Pages](https://maninka123.github.io/geofourier/) · [How it works](docs/MATHEMATICS.md)
 
-![Forma Custom Shapes - engineering profiles](docs/screenshots/custom-shapes.jpg)
+![Actual Studio reconstruction of Sri Lanka as Fourier terms increase from 1 to 150](docs/screenshots/fourier-build.gif)
 
-- **Studio:** animated construction, equations, boundary-error heatmap and close-ups, convergence and sampling checks.
-- **Difficulty Lab:** all-country ranking, component counts, sortable calculation times and a visible time-cost contribution.
-- **Compare:** shared or individual N, distinct flag colours, automatic accuracy curves and a sortable metrics table.
-- **Custom Shapes:** GeoJSON, SVG, CSV or a drawing. Pen, polygon, eraser, undo and redo; disconnected outlines and holes stay separate.
-- **Playback & export:** 2× by default, one speed control from 0.5× to 8×; PNG, SVG, WebM, JSON and CSV exports.
-- **Settings:** restore defaults or clear calculated results after confirmation; presets and uploaded shapes are kept.
+Actual Studio frames · **N = 1 → 150**. [Still view](docs/screenshots/readme-studio-full.jpg).
 
-Uploads stay in your browser. Limits: **2 MB, 50,000 points, 128 separate areas**. Open paths require confirmation before closing. SVG and drawings retain screen orientation; CSV uses x,y or longitude,latitude headers. Land-area names appear where available.
+| Studio · Build and inspect | Compare · Shared or individual N |
+| --- | --- |
+| [![Full Studio page with Sri Lanka, controls, accuracy and boundary checks](docs/screenshots/readme-studio-full.jpg)](docs/screenshots/readme-studio-full.jpg) | [![Full Compare page with Sri Lanka and Australia, accuracy curves and results](docs/screenshots/readme-compare-full.jpg)](docs/screenshots/readme-compare-full.jpg) |
+| **Difficulty Lab · Rank measured countries** | **Boundary checks · Locate errors and track convergence** |
+| [![Full Difficulty Lab page with twelve measured countries, ranking and country preview](docs/screenshots/readme-lab-full.jpg)](docs/screenshots/readme-lab-full.jpg) | [![Complete boundary checks with error map, close-ups, gap distribution and convergence plots](docs/screenshots/readme-validation.jpg)](docs/screenshots/readme-studio-full.jpg) |
+
+Click a screenshot for the full page.
+
+- **Custom shapes:** upload GeoJSON, SVG or CSV, or draw. Files stay in your browser; 2 MB limit.
+- **Export:** PNG, SVG, WebM, JSON and CSV. Playback runs from 0.5× to 8×.
+- **Measurements:** compare against the original map boundary. Scores approximate the dataset, not real-world coastline accuracy.
+
+## Run locally
 
 ```sh
 npm ci
 npm run dev
 ```
 
-`npm test` checks the mathematics, imports and validation. `npm run build` produces `dist/`. Pushes to `main` test, build and deploy to GitHub Pages.
+`npm test` checks the calculations; `npm run build` creates `dist/`.
 
-**Measurements:** similarity compares with the original boundary using overlap (70%) and closest-edge distance (30%). Difficulty combines term demand (70 points), border detail (20) and device-dependent calculation cost (10). Runs have no time limit by default. [Methods and limits](docs/MATHEMATICS.md).
+React · TypeScript · Vite · Canvas · Web Workers. No backend or API key.
 
-**Built with:** React, TypeScript, Vite, Canvas and a Web Worker FFT engine. No backend or API key.
-
-**Map data:** [Natural Earth](https://github.com/nvkelso/natural-earth-vector), public domain. 242 countries/territories at 1:50m, 177 at 1:110m. [Flags](https://flagcdn.com/).
+Maps: [Natural Earth](https://github.com/nvkelso/natural-earth-vector), public domain. Flags: [FlagCDN](https://flagcdn.com/).
